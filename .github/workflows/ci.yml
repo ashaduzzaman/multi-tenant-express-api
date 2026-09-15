@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, staging, main]
+
+env:
+  NODE_VERSION: "22"
+  PNPM_VERSION: "9"
+
+jobs:
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: npx prisma generate
+      - run: pnpm typecheck
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: npx prisma generate
+      - run: pnpm lint
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: multitenant_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://app_user:app_user_password@localhost:5432/multitenant_test
+      DATABASE_ADMIN_URL: postgresql://postgres:postgres@localhost:5432/multitenant_test
+      JWT_SECRET: ci-test-secret-at-least-32-characters-long-not-a-real-secret
+      JWT_ISSUER: multitenant-api
+      JWT_AUDIENCE: multitenant-api
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 30d
+      BCRYPT_ROUNDS: 10
+      COOKIE_ACCESS_NAME: mt_access
+      COOKIE_REFRESH_NAME: mt_refresh
+      REFRESH_TOKEN_TTL_DAYS: "30"
+      RATE_LIMIT_WINDOW_MS: "60000"
+      RATE_LIMIT_MAX: "1000"
+      PORT: "3000"
+      LOG_LEVEL: fatal
+      CORS_ORIGINS: http://localhost:5173
+      DB_POOL_MAX: "5"
+      DB_POOL_IDLE_TIMEOUT_MS: "30000"
+      DB_POOL_CONNECTION_TIMEOUT_MS: "5000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Mirrors db/init/*.sql (roles + extensions), which only auto-run on a
+      # fresh docker volume — the GitHub-managed postgres service doesn't
+      # execute them, so we apply the same statements explicitly here.
+      - name: Set up app_user role and extensions
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d multitenant_test -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"; CREATE EXTENSION IF NOT EXISTS \"pgcrypto\"; CREATE EXTENSION IF NOT EXISTS \"citext\"; CREATE EXTENSION IF NOT EXISTS \"pg_trgm\";"
+          psql -h localhost -U postgres -d multitenant_test -c "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN CREATE ROLE app_user LOGIN PASSWORD 'app_user_password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS; END IF; END \$\$;"
+          psql -h localhost -U postgres -d multitenant_test -c "GRANT CONNECT ON DATABASE multitenant_test TO app_user; GRANT USAGE ON SCHEMA public TO app_user; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO app_user; ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO app_user;"
+
+      - name: Apply migrations (includes hand-written RLS policies)
+        run: npx prisma migrate deploy
+
+      - run: pnpm test:coverage

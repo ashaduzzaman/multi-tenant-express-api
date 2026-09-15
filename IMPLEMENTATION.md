@@ -28,12 +28,12 @@ But **no new feature branch or PR happens until this is done**: every PR
 (feature→dev, dev→staging, staging→main) must be gated by CI from here on.
 See `PLAN.md` §16 for the design.
 
-- [ ] `.github/workflows/ci.yml`: `pull_request` → `[dev, staging, main]`
-- [ ] `typecheck` job (no DB needed — just `prisma generate` + `pnpm typecheck`)
-- [ ] `lint` job (no DB needed)
-- [ ] `test` job: Postgres service container, `db/init/*.sql` equivalent (roles + extensions) + `prisma migrate deploy`, then `pnpm test:coverage`
-- [ ] Verify all three jobs actually fail on a deliberately broken PR before trusting them as a gate
-- [ ] Tell the user to mark `typecheck`/`lint`/`test` as required status checks on `dev`, `staging`, and `main` in GitHub repo settings
+- [x] `.github/workflows/ci.yml`: `pull_request` → `[dev, staging, main]`
+- [x] `typecheck` job (no DB needed — `prisma generate` + `pnpm typecheck`)
+- [x] `lint` job (no DB needed)
+- [x] `test` job: Postgres service container, `db/init/*.sql` equivalent (roles + extensions, applied via `psql` since the GitHub-managed service doesn't run docker-volume init scripts) + `prisma migrate deploy`, then `pnpm test:coverage`
+- [ ] **Not yet verified against a real PR** — implemented on `feature/ci-github-actions` and pushed, but "does it actually fail on a broken PR" can only be confirmed once GitHub Actions runs it for real. Check this on the first PR before trusting it as a hard gate.
+- [ ] Tell the user to mark `typecheck`/`lint`/`test` as required status checks on `dev`, `staging`, and `main` in GitHub repo settings — **this is the immediate next step once the PR merges**
 
 ## Phase 0 — Planning
 - [x] Read both repos, produced initial Drizzle-based reuse plan
