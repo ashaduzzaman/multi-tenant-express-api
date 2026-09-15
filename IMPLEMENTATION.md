@@ -28,14 +28,28 @@ But **no new feature branch or PR happens until this is done**: every PR
 (feature→dev, dev→staging, staging→main) must be gated by CI from here on.
 See `PLAN.md` §16 for the design.
 
-- [x] `.github/workflows/ci.yml`: `pull_request` → `[dev, staging, main]`
-- [x] `typecheck` job (no DB needed — `prisma generate` + `pnpm typecheck`)
-- [x] `lint` job (no DB needed)
-- [x] `test` job: Postgres service container, `db/init/*.sql` equivalent (roles + extensions, applied via `psql` since the GitHub-managed service doesn't run docker-volume init scripts) + `prisma migrate deploy`, then `pnpm test:coverage`
-- [ ] **Not yet verified against a real PR** — implemented on `feature/ci-github-actions` and pushed, but "does it actually fail on a broken PR" can only be confirmed once GitHub Actions runs it for real. Check this on the first PR before trusting it as a hard gate.
-- [ ] Tell the user to mark `typecheck`/`lint`/`test` as required status checks on `dev`, `staging`, and `main` in GitHub repo settings — **this is the immediate next step once the PR merges**
+Expanded significantly past the original plan after the user reviewed the first draft and asked for the fuller foundation+dev+staging tier described in `PLAN.md` §16 before merging. All action versions below were verified against the GitHub API at implementation time (`actions/checkout@v7`, `actions/setup-node@v7`, `pnpm/action-setup@v6`, `gitleaks/gitleaks-action@v3`, `docker/build-push-action@v7`, `docker/login-action@v4`, `docker/metadata-action@v6`, `aquasecurity/trivy-action@v0.36.0`), not assumed.
+
+`.github/workflows/ci.yml` — `pull_request` → `[dev, staging, main]`, `concurrency` with `cancel-in-progress`:
+
+- [x] `lint-and-format` job: `pnpm lint` + `pnpm format:check` (no DB)
+- [x] `typecheck` job (no DB)
+- [x] `build` job (no DB)
+- [x] `prisma-schema` job: `prisma validate` + `prisma format --check` (no DB — verified locally these only need `DATABASE_ADMIN_URL` to resolve to _something_ URL-shaped, never an actual connection)
+- [x] `secret-scan` job: gitleaks v3 (personal-account repo, no license key needed — confirmed via gitleaks-action's own docs)
+- [x] `dependency-audit` job: `pnpm audit --audit-level=high`, non-blocking on `dev`, blocking on `staging`/`main` (`continue-on-error: ${{ github.base_ref == 'dev' }}`)
+- [x] `test` job: Postgres service container, `db/init/*.sql` equivalent (roles + extensions, applied via `psql` since the GitHub-managed service doesn't run docker-volume init scripts), **migration drift check** (`prisma migrate diff --exit-code`, verified locally both for a clean pass and for correctly catching an intentionally-introduced drift), `prisma migrate deploy`, then `pnpm test:coverage`
+
+`.github/workflows/docker.yml` — `push` to `[staging, main]` only (not every PR — would spam the registry for unmerged commits):
+
+- [x] Build → Trivy scan (CRITICAL/HIGH, fails the job) → upload SARIF to the Security tab → push to GHCR **only if the scan passed** (image is built+scanned before the push step ever runs)
+
+- [ ] **Not yet verified against a real PR/push** — implemented and pushed, but GitHub Actions itself running it for real (and the Docker workflow specifically, which needs an actual push to `staging`/`main`) can't be confirmed from here. Check the first real run before trusting it as a hard gate.
+- [ ] Tell the user to mark the CI jobs as required status checks on `dev`, `staging`, and `main` in GitHub repo settings — **immediate next step once this PR merges**
+- [ ] **Deliberately not built — needs the user's infrastructure decisions first:** `deploy-dev.yml`/`deploy-staging.yml`/`deploy-prod.yml` (hosting provider? existing accounts? approval gates on prod?) and Playwright E2E (nothing to meaningfully test yet — no real frontend↔backend integration exists until the frontend's Phase 2+). Fabricating either would mean shipping CI that references infrastructure or test scenarios that don't exist.
 
 ## Phase 0 — Planning
+
 - [x] Read both repos, produced initial Drizzle-based reuse plan
 - [x] Clarified auth transport / RBAC depth / module scope with user
 - [x] User changed direction: Prisma instead of Drizzle, TDD, two brain files, implement in one pass
@@ -43,6 +57,7 @@ See `PLAN.md` §16 for the design.
 - [x] `IMPLEMENTATION.md` written (this file)
 
 ## Phase 1 — Prisma swap
+
 - [x] Remove `drizzle-orm`, `drizzle-kit`, `drizzle.config.ts`, `src/db/schema.ts` (Drizzle version)
 - [x] Add `prisma`, `@prisma/client` (also added `cookie-parser`, `supertest` — needed by Phase 5/6/10+)
 - [x] `prisma/schema.prisma` — full model set written in one pass (see deviation note below)
@@ -53,30 +68,35 @@ See `PLAN.md` §16 for the design.
 - [x] `.env` / `.env.example` / `.env.test` created; `.gitignore` added (none existed before)
 
 ## Phase 2 — Schema: RBAC + refresh tokens
+
 - [x] `prisma/schema.prisma`: Permission, Role, RolePermission, RefreshToken, `User.roleId` — done together with Phase 1's schema, see deviation note
 - [x] `prisma migrate dev --create-only`, hand-edited migration.sql to append RLS (tenants/users/roles/role_permissions/refresh_tokens) + grants (incl. read-only grant on the global `permissions` catalog)
 - [x] Applied migration to both `multitenant_dev` and `multitenant_test`
 - [x] `npx prisma generate` run successfully
 
 ## Phase 3 — Permission catalog
-- [x] `src/config/permissions.ts` (starter registry: users:*, roles:*) + `DEFAULT_ROLE_PERMISSIONS` (Owner/Admin/Member) + tests (6 passing)
+
+- [x] `src/config/permissions.ts` (starter registry: users:_, roles:_) + `DEFAULT_ROLE_PERMISSIONS` (Owner/Admin/Member) + tests (6 passing)
 - [x] `src/lib/sync-permissions.ts` (testable upsert function, admin-client injected) + `scripts/sync-permissions.ts` (CLI runner)
 - [x] Test: idempotency + update-in-place verified (3 passing, real DB)
 - [!] Found & fixed a real bug during TDD: a JSDoc comment containing the literal substring `*/` inside a file path closed the comment early and broke esbuild parsing. Fixed by rewording. (Caught immediately by the RED step, exactly the kind of thing TDD is for.)
 
 ## Phase 4 — Lib utilities (TDD)
+
 - [x] `src/lib/refresh-token.ts` + test (5 passing)
 - [x] `src/lib/pagination.ts` + test (7 passing)
 - [x] `src/lib/permission-cache.ts` + test (6 passing, fake timers). Cache keyed by `tenantId:roleId`; DB fetch injected as a callback so the cache itself has zero DB/framework dependency.
 - [!] Found & fixed a real bug during TDD: original `parseInt(x,10) || default` pattern (ported from RIS-app-api's `pagination.ts`, which has the same bug) treats an explicit `pageSize=0` the same as "not provided" and silently returns 20 instead of clamping to 1. Fixed with explicit `Number.isNaN` checks. 35/35 tests green after the fix.
 
 ## Phase 5 — Middleware (TDD)
+
 - [x] `src/lib/jwt.ts` — `signAccessToken`/`verifyAccessToken` extracted as pure, testable functions (new — not in the original plan's file list, but auth.ts previously inlined this; splitting it out let it be unit-tested with real jose calls, no Express needed). 6 tests.
 - [x] `authMiddleware` extended for cookies (+ Bearer fallback, cookie takes priority) + test (6 passing). `AuthContext` changed from `role: enum` to `roleId: string` per the schema decision.
 - [x] `src/middleware/permissions.ts` — `loadPermissions` + `requirePermission` + `requireAnyPermission` + tests (7 passing, incl. one DB-integration test proving the RBAC tables are actually read correctly)
 - [x] `src/types/express.d.ts` updated: `AuthContext.role` → `roleId` + optional `permissions`
 
 ## Phase 6 — `modules/auth/` (TDD)
+
 - [x] `auth.schema.ts` (Zod: register, login) + tests (8 passing)
 - [x] `auth.repo.ts` + integration tests (8 passing) — proves cross-tenant email isolation directly (two tenants, same email, RLS keeps them apart)
 - [x] `auth.service.ts` (constructor-injected `AuthRepo` interface) + unit tests with a stubbed repo (14 passing) — dummy-bcrypt timing defense, refresh rotation, identical error for bad-tenant/bad-user/bad-password
@@ -86,6 +106,7 @@ See `PLAN.md` §16 for the design.
 - **Design decision (see PLAN.md):** login requires `tenantSlug` alongside email/password, since email is only unique per-tenant. Refresh/logout resolve tenant from the token hash via a narrow `adminPrisma` lookup (documented as the second sanctioned admin-bypass use case, alongside provisioning).
 
 ## Phase 7 — `modules/roles/` (TDD)
+
 - [x] `roles.schema.ts` (create/update, permissionIds as uuid arrays) + tests (8 passing)
 - [x] `roles.repo.ts` + integration tests (11 passing) — covers per-tenant unique name, cross-tenant name reuse, RLS isolation on findRoleById, permission-set replace-on-update, userCount aggregation
 - [x] `roles.service.ts` (constructor-injected `RolesRepo`) + unit tests (7 passing) — system-role delete protection, users-assigned delete protection, permission-cache invalidation ONLY on a permissionIds change (not on a bare rename — cheaper and correctly scoped)
@@ -94,6 +115,7 @@ See `PLAN.md` §16 for the design.
 - All roles-module tests passed on the first run after implementation — no bugs found here (contrast with auth/pagination phases).
 
 ## Phase 8 — `modules/users/` (TDD)
+
 - [x] `users.schema.ts` (create/update/changePassword) + tests (9 passing)
 - [x] `users.repo.ts` + integration tests (9 passing) — soft-delete exclusion from list/find, RLS isolation, P2002/P2003 error mapping
 - [x] `users.service.ts` (constructor-injected `UsersRepo`) + unit tests (10 passing) — password hashing before persistence, cannot-delete-self rule
@@ -106,6 +128,7 @@ See `PLAN.md` §16 for the design.
 **Full suite after Phase 8: 160/160 tests passing across 21 files.**
 
 ## Phase 9 — Seed script
+
 - [x] `scripts/seed.ts` rewritten for Prisma — reuses `registerTenantWithOwner` from `auth.repo.ts` directly (no separate seed-only provisioning code path to drift out of sync with the real register endpoint), seeds Acme + Globex with `Password123!`
 - [x] Runs `syncPermissions` first (documented prerequisite — a tenant registered before the catalog is synced would get roles with zero permissions)
 - [x] Idempotency verified by running twice against the dev DB — second run logs "already seeded, skipping" for both tenants, no errors, no duplicates
@@ -113,6 +136,7 @@ See `PLAN.md` §16 for the design.
 - [!] Small cleanup while wiring this up: `registerTenantWithOwner` originally took the full `RegisterInput` type (including `password`, which it never reads — it takes `passwordHash` as a separate argument). Introduced a `TenantProvisioningInput` type with just the 4 fields it actually uses, so `seed.ts` doesn't need a dummy `password: 'unused'` field. `AuthRepo`'s interface in `auth.service.ts` updated to match. All 160 tests still green after the change.
 
 ## Phase 10 — Wiring & docs
+
 - [x] Added `cookie-parser` middleware to `src/app.ts` (was missing — auth cookies wouldn't have been readable via `req.cookies` outside of tests, where each module's own test app added it locally)
 - [x] Mounted `authRouter` → `/api/v1/auth`, `rolesRouter` → `/api/v1/roles`, `usersRouter` → `/api/v1/users` in `src/app.ts`
 - [x] Rewrote `src/index.ts`: Prisma clients instead of Drizzle pools, calls `syncPermissions(adminPrisma)` before `app.listen` (boot sequence now: sync permissions → listen → graceful shutdown disconnects both Prisma clients)
@@ -121,6 +145,7 @@ See `PLAN.md` §16 for the design.
 - [!] **Found and fixed a second real bug while smoke-testing:** none this time — the notFoundHandler bug (Phase 6) was the only one; the live smoke test passed cleanly on the first try after wiring.
 
 ## Phase 11 — Final verification
+
 - [x] `pnpm typecheck` — clean. Fixed a **pre-existing** scaffold bug on the way: base `tsconfig.json` had `rootDir: "./src"` while also `include`-ing `scripts/`, `tests/`, and `*.config.ts` — a structural conflict (TS6059) that would have failed on day one of the scaffold, not something introduced this pass. Removed the explicit `rootDir` (TS infers it per-config now); `tsconfig.build.json`'s narrower `include: ["src/**/*"]` still infers `rootDir: "./src"` on its own, so `dist/` output shape is unchanged.
 - [x] `pnpm lint` — clean (0 errors, 0 warnings). Fixed a mix of pre-existing and newly-introduced issues:
   - Pre-existing, unrelated to this pass: `eslint.config.js` itself wasn't covered by the TS project service (added `allowDefaultProject`); `tseslint.config()` is deprecated in the installed typescript-eslint version (migrated to ESLint core's `defineConfig`); stale/unnecessary `eslint-disable` comments in `env.ts` and `express.d.ts`; a couple of `no-unnecessary-*`/`no-non-null-assertion`/`no-confusing-void-expression` violations in `async-handler.ts`, `errors.ts`, `pagination.ts`, `middleware/tenant-context.ts` that the strict-type-checked ESLint preset was never actually run against before (no evidence in the repo that `pnpm lint` had ever been executed clean).
@@ -141,9 +166,30 @@ See `PLAN.md` §16 for the design.
   this.
 - **CI/CD moved to an unnumbered section before Phase 0** instead of staying
   as the original "Phase 12" at the end. The user corrected this mid-project:
-  CI has to exist before the *first* gated PR, not after 11 phases of
+  CI has to exist before the _first_ gated PR, not after 11 phases of
   ungated work — see the CI/CD section above for why it isn't slotted into
   the historical 0–11 sequence at all.
+- **Found and fixed while adding the `format:check` CI gate: `pnpm format:check`
+  had never actually been run before** — 76 files needed reformatting (pure
+  whitespace/quote-style, Prettier never changes logic). Ran `pnpm format`
+  once, then re-ran `typecheck`/`lint`/the full test suite (still 172/172)
+  to confirm nothing broke.
+- **Fixed the `Dockerfile`: it never ran `prisma generate`.** The image
+  would have built "successfully" and then failed at container startup —
+  `@prisma/client`'s generated code wouldn't exist. Added the generate step
+  (needs `DATABASE_ADMIN_URL` set to a placeholder even though it never
+  connects — verified locally that `prisma generate`/`validate`/`format`
+  all just need the var to _resolve_, not a real database).
+- **Added `.dockerignore`** (didn't exist) so the build context isn't
+  `node_modules`/`.git`/`dist` for no reason.
+- **`prisma migrate diff` does not auto-create its shadow database**, unlike
+  `prisma migrate dev`, even though the connecting role has `CREATEDB` —
+  discovered by actually running the drift-check command locally (P1003:
+  database does not exist) before trusting it in CI. Added an explicit
+  `CREATE DATABASE multitenant_shadow` step before the diff check. Also
+  verified the check actually catches drift, not just that it passes
+  cleanly: temporarily added an unmigrated field to `schema.prisma`, ran
+  the same command, confirmed it fails with `--exit-code`, then reverted.
 
 - **Phase 1 + Phase 2 schema combined into a single migration.** PLAN.md
   separated them (tenants/users first, RBAC tables second) to mirror how a

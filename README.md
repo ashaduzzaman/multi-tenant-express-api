@@ -32,20 +32,21 @@ pnpm dev
 
 App listens on http://localhost:3000.
 
-| Endpoint | Purpose |
-|---|---|
-| `GET /healthz` | Liveness — process is up |
-| `GET /readyz` | Readiness — DB reachable, RLS context works |
-| `POST /api/v1/auth/register` | Create a tenant + Owner user |
-| `POST /api/v1/auth/login` | `{ tenantSlug, email, password }` → sets cookies |
-| `POST /api/v1/auth/refresh` | Rotates the refresh cookie |
-| `POST /api/v1/auth/logout` | Clears cookies, revokes the refresh token |
-| `GET /api/v1/auth/me` | Current user + permissions |
-| `GET/POST/PUT/DELETE /api/v1/roles` | Tenant-scoped custom roles |
-| `GET /api/v1/roles/permissions` | The permission catalog |
+| Endpoint                            | Purpose                                              |
+| ----------------------------------- | ---------------------------------------------------- |
+| `GET /healthz`                      | Liveness — process is up                             |
+| `GET /readyz`                       | Readiness — DB reachable, RLS context works          |
+| `POST /api/v1/auth/register`        | Create a tenant + Owner user                         |
+| `POST /api/v1/auth/login`           | `{ tenantSlug, email, password }` → sets cookies     |
+| `POST /api/v1/auth/refresh`         | Rotates the refresh cookie                           |
+| `POST /api/v1/auth/logout`          | Clears cookies, revokes the refresh token            |
+| `GET /api/v1/auth/me`               | Current user + permissions                           |
+| `GET/POST/PUT/DELETE /api/v1/roles` | Tenant-scoped custom roles                           |
+| `GET /api/v1/roles/permissions`     | The permission catalog                               |
 | `GET/POST/PUT/DELETE /api/v1/users` | User CRUD (`PUT /:id/password` for password changes) |
 
 Try it once the server is up:
+
 ```bash
 curl -c cookies.txt -X POST http://localhost:3000/api/v1/auth/register \
   -H 'Content-Type: application/json' \

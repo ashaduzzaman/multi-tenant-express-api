@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const registerInput = z.object({
   tenantName: z.string().min(1).max(255),
@@ -6,7 +6,7 @@ export const registerInput = z.object({
     .string()
     .min(1)
     .max(64)
-    .regex(/^[a-z0-9-]+$/, 'lowercase letters, numbers, and hyphens only'),
+    .regex(/^[a-z0-9-]+$/, "lowercase letters, numbers, and hyphens only"),
   email: z.string().email(),
   password: z.string().min(8).max(72),
   name: z.string().min(1).max(255),

@@ -1,0 +1,68 @@
+name: Docker image
+
+# Post-merge only, not on every PR — building and pushing an image for every
+# unmerged commit would spam the registry. Runs once dev→staging or
+# staging→main actually lands.
+on:
+  push:
+    branches: [staging, main]
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+jobs:
+  build-scan-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v6
+        id: meta
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,format=long
+            type=ref,event=branch
+
+      # Build (and load locally) before pushing, so Trivy can scan the exact
+      # image about to be pushed rather than trusting an unscanned push.
+      - uses: docker/build-push-action@v7
+        id: build
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+
+      - uses: github/codeql-action/upload-sarif@codeql-bundle-v2.27.0
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
+      # Only reached if Trivy passed — no vulnerable image ever gets pushed.
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha

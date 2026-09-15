@@ -1,7 +1,7 @@
-import type { NextFunction, Request, Response } from 'express';
-import { withTenantContextReadOnly } from '#/db/tenant-context.js';
-import { ForbiddenError, UnauthorizedError } from '#/lib/errors.js';
-import { permissionCache } from '#/lib/permission-cache.js';
+import type { NextFunction, Request, Response } from "express";
+import { withTenantContextReadOnly } from "#/db/tenant-context.js";
+import { ForbiddenError, UnauthorizedError } from "#/lib/errors.js";
+import { permissionCache } from "#/lib/permission-cache.js";
 
 /**
  * Mount AFTER authMiddleware + tenantContextMiddleware. Loads the caller's
@@ -22,8 +22,10 @@ export async function loadPermissions(
       throw new UnauthorizedError();
     }
     const { tenantId, roleId } = req.auth;
-    req.auth.permissions = await permissionCache.getPermissions(tenantId, roleId, () =>
-      fetchPermissions(tenantId, roleId),
+    req.auth.permissions = await permissionCache.getPermissions(
+      tenantId,
+      roleId,
+      () => fetchPermissions(tenantId, roleId),
     );
     next();
   } catch (err) {
@@ -31,9 +33,15 @@ export async function loadPermissions(
   }
 }
 
-async function fetchPermissions(tenantId: string, roleId: string): Promise<string[]> {
+async function fetchPermissions(
+  tenantId: string,
+  roleId: string,
+): Promise<string[]> {
   const rows = await withTenantContextReadOnly(tenantId, (tx) =>
-    tx.rolePermission.findMany({ where: { roleId }, include: { permission: true } }),
+    tx.rolePermission.findMany({
+      where: { roleId },
+      include: { permission: true },
+    }),
   );
   return rows.map((r) => r.permission.name);
 }

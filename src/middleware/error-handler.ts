@@ -1,7 +1,7 @@
-import type { ErrorRequestHandler, RequestHandler } from 'express';
-import { ZodError } from 'zod';
-import { AppError } from '#/lib/errors.js';
-import { logger } from '#/lib/logger.js';
+import type { ErrorRequestHandler, RequestHandler } from "express";
+import { ZodError } from "zod";
+import { AppError } from "#/lib/errors.js";
+import { logger } from "#/lib/logger.js";
 
 interface ErrorBody {
   error: {
@@ -19,8 +19,8 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   if (err instanceof ZodError) {
     const body: ErrorBody = {
       error: {
-        code: 'VALIDATION_ERROR',
-        message: 'Validation failed',
+        code: "VALIDATION_ERROR",
+        message: "Validation failed",
         details: err.flatten(),
         requestId,
       },
@@ -40,20 +40,20 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       },
     };
     if (err.statusCode >= 500) {
-      logger.error({ err, requestId }, 'operational error (5xx)');
+      logger.error({ err, requestId }, "operational error (5xx)");
     } else {
-      logger.warn({ err, requestId }, 'operational error');
+      logger.warn({ err, requestId }, "operational error");
     }
     res.status(err.statusCode).json(body);
     return;
   }
 
   // Unknown errors → never expose internals
-  logger.error({ err, requestId }, 'unexpected error');
+  logger.error({ err, requestId }, "unexpected error");
   const body: ErrorBody = {
     error: {
-      code: 'INTERNAL_ERROR',
-      message: 'An unexpected error occurred',
+      code: "INTERNAL_ERROR",
+      message: "An unexpected error occurred",
       requestId,
     },
   };
@@ -71,6 +71,6 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
 // for real "nothing matched" cases when it takes no err param at all.
 export const notFoundHandler: RequestHandler = (_req, res) => {
   res.status(404).json({
-    error: { code: 'NOT_FOUND', message: 'Route not found' },
+    error: { code: "NOT_FOUND", message: "Route not found" },
   });
 };

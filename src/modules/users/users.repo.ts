@@ -1,7 +1,10 @@
-import { Prisma } from '@prisma/client';
-import { withTenantContext, withTenantContextReadOnly } from '#/db/tenant-context.js';
-import { BadRequestError, ConflictError } from '#/lib/errors.js';
-import type { PaginatedResult, PaginationParams } from '#/lib/pagination.js';
+import { Prisma } from "@prisma/client";
+import {
+  withTenantContext,
+  withTenantContextReadOnly,
+} from "#/db/tenant-context.js";
+import { BadRequestError, ConflictError } from "#/lib/errors.js";
+import type { PaginatedResult, PaginationParams } from "#/lib/pagination.js";
 
 export interface PublicUser {
   id: string;
@@ -26,10 +29,10 @@ export interface UpdateUserFields {
   roleId?: string;
 }
 
-const SORT_COLUMN: Record<string, 'name' | 'email' | 'createdAt'> = {
-  name: 'name',
-  email: 'email',
-  createdAt: 'createdAt',
+const SORT_COLUMN: Record<string, "name" | "email" | "createdAt"> = {
+  name: "name",
+  email: "email",
+  createdAt: "createdAt",
 };
 
 const SELECT_PUBLIC = {
@@ -68,7 +71,7 @@ export async function listUsers(
 ): Promise<PaginatedResult<PublicUser>> {
   return withTenantContextReadOnly(tenantId, async (tx) => {
     const where = { tenantId, deletedAt: null };
-    const orderBy = { [SORT_COLUMN[params.sort] ?? 'name']: params.order };
+    const orderBy = { [SORT_COLUMN[params.sort] ?? "name"]: params.order };
     const [total, users] = await Promise.all([
       tx.user.count({ where }),
       tx.user.findMany({
@@ -80,11 +83,19 @@ export async function listUsers(
       }),
     ]);
 
-    return { data: users.map(toPublicUser), page: params.page, pageSize: params.pageSize, total };
+    return {
+      data: users.map(toPublicUser),
+      page: params.page,
+      pageSize: params.pageSize,
+      total,
+    };
   });
 }
 
-export async function findUserById(tenantId: string, userId: string): Promise<PublicUser | null> {
+export async function findUserById(
+  tenantId: string,
+  userId: string,
+): Promise<PublicUser | null> {
   return withTenantContextReadOnly(tenantId, async (tx) => {
     const user = await tx.user.findFirst({
       where: { id: userId, deletedAt: null },
@@ -94,7 +105,10 @@ export async function findUserById(tenantId: string, userId: string): Promise<Pu
   });
 }
 
-export async function createUser(tenantId: string, data: CreateUserData): Promise<PublicUser> {
+export async function createUser(
+  tenantId: string,
+  data: CreateUserData,
+): Promise<PublicUser> {
   try {
     return await withTenantContext(tenantId, async (tx) => {
       const user = await tx.user.create({
@@ -138,12 +152,18 @@ export async function updatePassword(
   passwordHash: string,
 ): Promise<boolean> {
   const { count } = await withTenantContext(tenantId, (tx) =>
-    tx.user.updateMany({ where: { id: userId, deletedAt: null }, data: { passwordHash } }),
+    tx.user.updateMany({
+      where: { id: userId, deletedAt: null },
+      data: { passwordHash },
+    }),
   );
   return count > 0;
 }
 
-export async function softDeleteUser(tenantId: string, userId: string): Promise<void> {
+export async function softDeleteUser(
+  tenantId: string,
+  userId: string,
+): Promise<void> {
   await withTenantContext(tenantId, (tx) =>
     tx.user.updateMany({
       where: { id: userId, deletedAt: null },
@@ -154,11 +174,15 @@ export async function softDeleteUser(tenantId: string, userId: string): Promise<
 
 function mapWriteError(err: unknown): unknown {
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    if (err.code === 'P2002') {
-      return new ConflictError('A user with this email already exists in this tenant');
+    if (err.code === "P2002") {
+      return new ConflictError(
+        "A user with this email already exists in this tenant",
+      );
     }
-    if (err.code === 'P2003') {
-      return new BadRequestError('roleId does not refer to a role in this tenant');
+    if (err.code === "P2003") {
+      return new BadRequestError(
+        "roleId does not refer to a role in this tenant",
+      );
     }
   }
   return err;

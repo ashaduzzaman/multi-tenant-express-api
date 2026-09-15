@@ -13,9 +13,18 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 
 # ---- Build ----
 FROM base AS build
+# `prisma generate` parses schema.prisma's datasource block, which reads
+# DATABASE_ADMIN_URL via env() — it doesn't need to actually connect, but
+# the var must resolve to *something* URL-shaped or generate fails. This is
+# a placeholder, never used for a real connection at this stage.
+ENV DATABASE_ADMIN_URL="postgresql://build:build@localhost:5432/build"
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN pnpm run build && \
+# Prisma client must be generated before both `build` (tsc needs its types)
+# and `prune` (the generated client has to already exist in node_modules
+# before we strip devDependencies, since `prisma` itself is a devDependency).
+RUN pnpm exec prisma generate && \
+    pnpm run build && \
     pnpm prune --prod
 
 # ---- Runtime ----
