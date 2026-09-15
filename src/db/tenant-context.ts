@@ -1,6 +1,6 @@
-import type { Prisma } from '@prisma/client';
-import { prisma } from './client.js';
-import { TenantContextError } from '#/lib/errors.js';
+import type { Prisma } from "@prisma/client";
+import { prisma } from "./client.js";
+import { TenantContextError } from "#/lib/errors.js";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -33,7 +33,7 @@ export async function withTenantContext<T>(
   tenantId: string,
   callback: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
-  assertTenantId(tenantId, 'withTenantContext');
+  assertTenantId(tenantId, "withTenantContext");
 
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
@@ -49,7 +49,7 @@ export async function withTenantContextReadOnly<T>(
   tenantId: string,
   callback: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
-  assertTenantId(tenantId, 'withTenantContextReadOnly');
+  assertTenantId(tenantId, "withTenantContextReadOnly");
 
   return prisma.$transaction(async (tx) => {
     // Must be the first statement in the transaction — Postgres rejects
@@ -65,7 +65,7 @@ export async function withTenantContextReadOnly<T>(
  * tenant GUC mechanism works. Does NOT use a real tenant id.
  */
 export async function pingTenantContext(): Promise<boolean> {
-  const fakeTenantId = '00000000-0000-0000-0000-000000000000';
+  const fakeTenantId = "00000000-0000-0000-0000-000000000000";
   try {
     return await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT set_config('app.current_tenant_id', ${fakeTenantId}, true)`;
@@ -80,7 +80,7 @@ export async function pingTenantContext(): Promise<boolean> {
 }
 
 function assertTenantId(tenantId: string, fnName: string): void {
-  if (!tenantId || typeof tenantId !== 'string') {
+  if (!tenantId || typeof tenantId !== "string") {
     throw new TenantContextError(`${fnName} called without a valid tenantId`);
   }
 }

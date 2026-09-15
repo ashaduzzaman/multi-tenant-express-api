@@ -16,7 +16,11 @@ services:
       # Init scripts run in lexicographic order, ONLY on a fresh data volume
       - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-multitenant_dev}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-multitenant_dev}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 10

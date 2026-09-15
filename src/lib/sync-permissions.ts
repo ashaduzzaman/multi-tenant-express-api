@@ -1,6 +1,9 @@
-import type { PrismaClient } from '@prisma/client';
-import { PERMISSION_REGISTRY, type PermissionDef } from '#/config/permissions.js';
-import { logger } from './logger.js';
+import type { PrismaClient } from "@prisma/client";
+import {
+  PERMISSION_REGISTRY,
+  type PermissionDef,
+} from "#/config/permissions.js";
+import { logger } from "./logger.js";
 
 /**
  * Upserts the code-defined permission catalog into the `permissions` table.
@@ -16,8 +19,12 @@ export async function syncPermissions(
     await client.permission.upsert({
       where: { name: def.name },
       create: def,
-      update: { resource: def.resource, action: def.action, description: def.description },
+      update: {
+        resource: def.resource,
+        action: def.action,
+        description: def.description,
+      },
     });
   }
-  logger.info({ count: registry.length }, 'permission catalog synced');
+  logger.info({ count: registry.length }, "permission catalog synced");
 }

@@ -1,5 +1,5 @@
-import type { NextFunction, Request, Response } from 'express';
-import { TenantContextError } from '#/lib/errors.js';
+import type { NextFunction, Request, Response } from "express";
+import { TenantContextError } from "#/lib/errors.js";
 
 /**
  * Mount AFTER authMiddleware. Establishes `req.tenantId` from the verified
@@ -23,7 +23,7 @@ export function tenantContextMiddleware(
   if (!req.auth) {
     next(
       new TenantContextError(
-        'tenantContextMiddleware ran before authMiddleware (or auth was skipped)',
+        "tenantContextMiddleware ran before authMiddleware (or auth was skipped)",
       ),
     );
     return;
@@ -39,7 +39,9 @@ export function tenantContextMiddleware(
  */
 export function requireTenantId(req: Request): string {
   if (!req.tenantId) {
-    throw new TenantContextError('Handler requires tenant context but none was set');
+    throw new TenantContextError(
+      "Handler requires tenant context but none was set",
+    );
   }
   return req.tenantId;
 }

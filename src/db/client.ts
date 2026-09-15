@@ -1,5 +1,5 @@
-import { PrismaClient } from '@prisma/client';
-import { env } from '#/config/env.js';
+import { PrismaClient } from "@prisma/client";
+import { env } from "#/config/env.js";
 
 /**
  * ════════════════════════════════════════════════════════════════════════════
@@ -18,7 +18,9 @@ import { env } from '#/config/env.js';
  * ════════════════════════════════════════════════════════════════════════════
  */
 export const prisma = new PrismaClient({ datasourceUrl: env.DATABASE_URL });
-export const adminPrisma = new PrismaClient({ datasourceUrl: env.DATABASE_ADMIN_URL });
+export const adminPrisma = new PrismaClient({
+  datasourceUrl: env.DATABASE_ADMIN_URL,
+});
 
 export async function disconnectAll(): Promise<void> {
   await Promise.all([prisma.$disconnect(), adminPrisma.$disconnect()]);

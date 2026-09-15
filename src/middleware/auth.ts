@@ -1,7 +1,7 @@
-import type { NextFunction, Request, Response } from 'express';
-import { env } from '#/config/env.js';
-import { UnauthorizedError } from '#/lib/errors.js';
-import { verifyAccessToken } from '#/lib/jwt.js';
+import type { NextFunction, Request, Response } from "express";
+import { env } from "#/config/env.js";
+import { UnauthorizedError } from "#/lib/errors.js";
+import { verifyAccessToken } from "#/lib/jwt.js";
 
 /**
  * Verifies the access token and attaches `req.auth`. Does NOT set the tenant
@@ -21,7 +21,7 @@ export async function authMiddleware(
   try {
     const token = extractToken(req);
     if (!token) {
-      throw new UnauthorizedError('Missing access token');
+      throw new UnauthorizedError("Missing access token");
     }
 
     const claims = await verifyAccessToken(token);
@@ -34,20 +34,24 @@ export async function authMiddleware(
     };
     next();
   } catch (err) {
-    next(err instanceof UnauthorizedError ? err : new UnauthorizedError('Invalid or expired token'));
+    next(
+      err instanceof UnauthorizedError
+        ? err
+        : new UnauthorizedError("Invalid or expired token"),
+    );
   }
 }
 
 function extractToken(req: Request): string | null {
   const cookies = req.cookies as Record<string, unknown> | undefined;
   const cookieToken = cookies?.[env.COOKIE_ACCESS_NAME];
-  if (typeof cookieToken === 'string' && cookieToken.length > 0) {
+  if (typeof cookieToken === "string" && cookieToken.length > 0) {
     return cookieToken;
   }
 
   const header = req.headers.authorization;
-  if (header?.startsWith('Bearer ')) {
-    const bearer = header.slice('Bearer '.length).trim();
+  if (header?.startsWith("Bearer ")) {
+    const bearer = header.slice("Bearer ".length).trim();
     if (bearer) return bearer;
   }
 

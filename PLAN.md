@@ -26,13 +26,13 @@ modules are explicitly deferred to a later pass.
 
 ## 1. Decisions made (do not re-litigate without a reason)
 
-| Decision | Choice | Why |
-|---|---|---|
-| ORM | **Prisma** (swap out Drizzle) | Explicit user instruction. Supersedes the "don't switch ORM" rule in the old CLAUDE.md — that rule is being rewritten as part of this change. |
-| Auth transport | httpOnly cookies, access (15m) + refresh (30d) with rotation | Matches RIS's proven pattern; most complete option for a starter kit. Bearer header kept as a fallback for non-browser clients. |
-| RBAC depth | Full granular `permissions` / `roles` / `role_permissions`, tenant-scoped roles | "Great starter kit" bar — richer than the enum this scaffold shipped with. |
-| First-pass module scope | Auth + RBAC + Users only | Deliberately tight; email/storage/queue/notifications/profile are a documented follow-up, not forgotten. |
-| Process | TDD, two living markdown files (this one + `IMPLEMENTATION.md`), implement in one continuous pass | Explicit user instruction. |
+| Decision                | Choice                                                                                            | Why                                                                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| ORM                     | **Prisma** (swap out Drizzle)                                                                     | Explicit user instruction. Supersedes the "don't switch ORM" rule in the old CLAUDE.md — that rule is being rewritten as part of this change. |
+| Auth transport          | httpOnly cookies, access (15m) + refresh (30d) with rotation                                      | Matches RIS's proven pattern; most complete option for a starter kit. Bearer header kept as a fallback for non-browser clients.               |
+| RBAC depth              | Full granular `permissions` / `roles` / `role_permissions`, tenant-scoped roles                   | "Great starter kit" bar — richer than the enum this scaffold shipped with.                                                                    |
+| First-pass module scope | Auth + RBAC + Users only                                                                          | Deliberately tight; email/storage/queue/notifications/profile are a documented follow-up, not forgotten.                                      |
+| Process                 | TDD, two living markdown files (this one + `IMPLEMENTATION.md`), implement in one continuous pass | Explicit user instruction.                                                                                                                    |
 
 ## 2. Tech stack (updated)
 
@@ -214,6 +214,7 @@ model RefreshToken {
 ```
 
 Notes / breaking changes vs. the current scaffold:
+
 - `users.role` enum column is **removed**, replaced by `users.roleId` FK →
   `roles.id`. `requireRole('owner'|'admin'|'member')` is replaced by
   `requirePermission('<resource>:<action>')`; a thin `requireAnyPermission`
@@ -259,7 +260,7 @@ RIS's "Admin gets everything, others configurable" pattern, scaled down.)
 ### `modules/auth/` — `/api/v1/auth`
 
 **Design note not present in RIS-app-api (single-tenant, so this never came up):**
-`users.email` is unique *per tenant*, not globally (`idx_users_tenant_email`).
+`users.email` is unique _per tenant_, not globally (`idx_users_tenant_email`).
 That means login can't resolve "which tenant" from email alone — two tenants
 can each have an `owner@acme.test`. Login therefore takes a `tenantSlug`
 alongside credentials (the same pattern Slack/Notion/etc. use — a workspace
@@ -272,34 +273,34 @@ guessable, and this is the one place besides provisioning where bypassing
 RLS is correct, not a shortcut). Every subsequent operation in that request
 still goes through `withTenantContext` once the tenant is known.
 
-| Method | Path | Auth | Body | Notes |
-|---|---|---|---|---|
-| POST | `/register` | none | `{ tenantName, tenantSlug, email, password, name }` | Creates tenant + seeds Owner/Admin/Member roles (Owner/Admin/Member get permissions per `DEFAULT_ROLE_PERMISSIONS`) + creates Owner user, in one `adminPrisma.$transaction` (provisioning, not request-scoped RLS). Requires the permission catalog to already be synced (see Phase 10 boot sequence). |
-| POST | `/login` | none | `{ tenantSlug, email, password }` | Resolve tenant by slug (`adminPrisma`, narrow lookup — slug existence isn't sensitive), then look up the user tenant-scoped. Dummy-bcrypt timing defense (ported from RIS) applies whether the tenant, the user, or the password is what's wrong — the response is identical in all three cases. Sets access+refresh cookies. |
-| POST | `/refresh` | refresh cookie | — | Resolve tenant from the token hash (see design note above), rotate (delete-old-insert-new), matches RIS's rotation-on-use pattern. |
-| POST | `/logout` | none | — | Best-effort: resolve + delete the refresh token row if present, always clear cookies. |
-| GET | `/me` | access cookie/bearer | — | Returns user + permissions. |
+| Method | Path        | Auth                 | Body                                                | Notes                                                                                                                                                                                                                                                                                                                         |
+| ------ | ----------- | -------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| POST   | `/register` | none                 | `{ tenantName, tenantSlug, email, password, name }` | Creates tenant + seeds Owner/Admin/Member roles (Owner/Admin/Member get permissions per `DEFAULT_ROLE_PERMISSIONS`) + creates Owner user, in one `adminPrisma.$transaction` (provisioning, not request-scoped RLS). Requires the permission catalog to already be synced (see Phase 10 boot sequence).                        |
+| POST   | `/login`    | none                 | `{ tenantSlug, email, password }`                   | Resolve tenant by slug (`adminPrisma`, narrow lookup — slug existence isn't sensitive), then look up the user tenant-scoped. Dummy-bcrypt timing defense (ported from RIS) applies whether the tenant, the user, or the password is what's wrong — the response is identical in all three cases. Sets access+refresh cookies. |
+| POST   | `/refresh`  | refresh cookie       | —                                                   | Resolve tenant from the token hash (see design note above), rotate (delete-old-insert-new), matches RIS's rotation-on-use pattern.                                                                                                                                                                                            |
+| POST   | `/logout`   | none                 | —                                                   | Best-effort: resolve + delete the refresh token row if present, always clear cookies.                                                                                                                                                                                                                                         |
+| GET    | `/me`       | access cookie/bearer | —                                                   | Returns user + permissions.                                                                                                                                                                                                                                                                                                   |
 
 ### `modules/roles/` — `/api/v1/roles` (all routes: auth + tenant context + permission gate)
 
-| Method | Path | Permission | Notes |
-|---|---|---|---|
-| GET | `/` | `roles:read` | paginated, includes `permissionIds`/`userCount` |
-| GET | `/permissions` | `roles:read` | full permission catalog |
-| POST | `/` | `roles:create` | `{ name, permissionIds? }` |
-| PUT | `/:id` | `roles:update` | `{ name?, permissionIds? }` — invalidates permission cache |
-| DELETE | `/:id` | `roles:delete` | 403 if `isSystem`; 409 if users assigned |
+| Method | Path           | Permission     | Notes                                                      |
+| ------ | -------------- | -------------- | ---------------------------------------------------------- |
+| GET    | `/`            | `roles:read`   | paginated, includes `permissionIds`/`userCount`            |
+| GET    | `/permissions` | `roles:read`   | full permission catalog                                    |
+| POST   | `/`            | `roles:create` | `{ name, permissionIds? }`                                 |
+| PUT    | `/:id`         | `roles:update` | `{ name?, permissionIds? }` — invalidates permission cache |
+| DELETE | `/:id`         | `roles:delete` | 403 if `isSystem`; 409 if users assigned                   |
 
 ### `modules/users/` — `/api/v1/users`
 
-| Method | Path | Permission | Notes |
-|---|---|---|---|
-| GET | `/` | `users:read` | paginated |
-| GET | `/:id` | `users:read` | |
-| POST | `/` | `users:create` | `{ email, name, password, roleId }` |
-| PUT | `/:id` | `users:update` | partial |
-| PUT | `/:id/password` | `users:update` | self or admin |
-| DELETE | `/:id` | `users:delete` | soft delete; cannot delete self |
+| Method | Path            | Permission     | Notes                               |
+| ------ | --------------- | -------------- | ----------------------------------- |
+| GET    | `/`             | `users:read`   | paginated                           |
+| GET    | `/:id`          | `users:read`   |                                     |
+| POST   | `/`             | `users:create` | `{ email, name, password, roleId }` |
+| PUT    | `/:id`          | `users:update` | partial                             |
+| PUT    | `/:id/password` | `users:update` | self or admin                       |
+| DELETE | `/:id`          | `users:delete` | soft delete; cannot delete self     |
 
 ## 9. Layering (per existing `src/modules/README.md`, unchanged contract)
 
@@ -349,7 +350,7 @@ equivalent once (or assumes it's already migrated) and each test file wraps
 its assertions so leftover rows don't bleed across tests (either
 truncate-in-`afterEach` or unique-per-test tenant slugs — we use unique
 per-test tenant slugs, since RLS isolation tests specifically need
-*multiple* coexisting tenants).
+_multiple_ coexisting tenants).
 
 **Coverage bar:** the scaffold's existing `vitest.config.ts` threshold
 (70% lines/functions/branches/statements) stays the floor, not the target —
@@ -426,43 +427,94 @@ See `IMPLEMENTATION.md` for the live checklist. Order:
 ## 16. CI/CD — GitHub Actions gating every PR (`dev`, `staging`, `main`)
 
 **Priority zero, not a final step** — corrected mid-project: the three-tier
-`feature/* → dev → staging → main` model needs CI passing at *every* hop
+`feature/* → dev → staging → main` model needs CI passing at _every_ hop
 before this repo's other phases resume normal feature-branch work. Per the
 git-workflow rule (`CLAUDE.md` §0), this is its own
 `feature/ci-github-actions` branch, PR'd for review like any other feature
 — but it goes first.
 
-- **Trigger:** `pull_request` targeting `dev`, `staging`, **or** `main` —
-  one workflow, three target branches, same checks at every promotion.
-- **Needs a real Postgres**, per this project's own testing philosophy
-  (`CLAUDE.md` §9 — repo/integration tests hit a real DB, never mocked).
-  Use a `services: postgres:` container in the workflow (same image as
-  `docker-compose.yml`, `postgres:17-alpine`), then in a setup step: run
-  `db/init/*.sql` (creates `app_user` + extensions) and
-  `npx prisma migrate deploy` against a `multitenant_test` database —
-  mirroring exactly what `.env.test` + this session's throwaway local
-  cluster did during development (see `IMPLEMENTATION.md`'s "Local dev/test
-  environment note").
-- **Jobs:**
-  1. `typecheck` — `pnpm install --frozen-lockfile && pnpm typecheck`.
-  2. `lint` — `pnpm lint` (`eslint --max-warnings=0`, already zero-tolerance
-     locally — CI should hold the same bar, not a looser one).
-  3. `test` — `pnpm test` (or `test:coverage`) against the Postgres service.
-     `vitest.config.ts`'s coverage thresholds (70% floor, §10) already fail
-     the run below that bar — CI gets that enforcement for free, no extra
-     config needed.
-- **Env vars for the job:** dummy-but-valid values matching `.env.test`'s
-  shape (`JWT_SECRET` ≥32 chars, `DATABASE_URL`/`DATABASE_ADMIN_URL`
-  pointing at the ephemeral service container, low `BCRYPT_ROUNDS` isn't
-  required in CI the way it was for fast local iteration, but doesn't hurt).
-  None of these are real secrets — the Postgres instance is destroyed with
-  the runner.
-- **Node/pnpm version:** Node 22 (per `engines` in `package.json`), pnpm via
-  `pnpm/action-setup` matching the `>=9.0.0` engine constraint.
-- **Branch protection:** once the workflow file exists, the user needs to
-  mark `typecheck`/`lint`/`test` as required status checks on `dev` in
-  GitHub's repo settings — a repo-admin action, not something a workflow
-  file can configure itself.
+### `ci.yml` — every PR, all three target branches
+
+**Trigger:** `pull_request` targeting `dev`, `staging`, **or** `main` — one
+workflow, three target branches, same checks at every promotion.
+`concurrency` + `cancel-in-progress` so a new push supersedes a stale run.
+
+**Jobs (all independent, run in parallel):**
+
+1. `lint-and-format` — `pnpm lint` (`eslint --max-warnings=0`) +
+   `pnpm format:check` (Prettier). No DB.
+2. `typecheck` — `pnpm typecheck`. No DB.
+3. `build` — `pnpm build`. No DB.
+4. `prisma-schema` — `prisma validate` + `prisma format --check`. No DB
+   connection needed, but `DATABASE_ADMIN_URL` must still resolve to
+   _something_ URL-shaped for the schema's `env()` reference to parse —
+   verified locally this doesn't need to be a real, reachable database.
+5. `secret-scan` — `gitleaks/gitleaks-action@v3` (full git history via
+   `fetch-depth: 0`). This repo is personal-account-owned, so no
+   `GITLEAKS_LICENSE` is needed (only required for org-owned repos).
+6. `dependency-audit` — `pnpm audit --audit-level=high`. Non-blocking
+   (`continue-on-error`) when the PR targets `dev`; blocking on `staging`
+   and `main`.
+7. `test` — the one job needing a real Postgres, per this project's own
+   testing philosophy (`CLAUDE.md` §9 — repo/integration tests hit a real
+   DB, never mocked). Uses a `services: postgres:` container
+   (`postgres:17-alpine`, matching `docker-compose.yml`). Steps, in order:
+   - Apply `db/init/*.sql`'s statements by hand (roles + extensions) — the
+     GitHub-managed service container doesn't run docker-volume init
+     scripts the way local `pnpm db:up` does.
+   - Create a shadow database, then run **migration drift check**
+     (`prisma migrate diff --from-migrations ./prisma/migrations
+--to-schema-datamodel ./prisma/schema.prisma --shadow-database-url
+... --exit-code`) — fails the build if `schema.prisma` and
+     `prisma/migrations/` have drifted apart (someone edited the schema
+     without generating a migration). Verified locally both that a clean
+     repo passes and that an intentionally-introduced drift is caught.
+     Note: unlike `prisma migrate dev`, `migrate diff` does **not**
+     auto-create its shadow database even though the connecting role has
+     `CREATEDB` — it must be created explicitly first (`P1003` otherwise).
+   - `prisma migrate deploy` (applies the real hand-written-RLS migrations).
+   - `pnpm test:coverage`. `vitest.config.ts`'s coverage thresholds (70%
+     floor, §10) already fail the run below that bar — no extra config.
+
+**Env vars:** dummy-but-valid values matching `.env.test`'s shape (`JWT_SECRET`
+≥32 chars, `DATABASE_URL`/`DATABASE_ADMIN_URL` pointing at the ephemeral
+service container). None are real secrets — the Postgres instance is
+destroyed with the runner.
+
+**Action versions** (verified against the GitHub API at implementation
+time, not assumed): `actions/checkout@v7`, `actions/setup-node@v7`,
+`pnpm/action-setup@v6`, `gitleaks/gitleaks-action@v3`.
+
+### `docker.yml` — post-merge only, not every PR
+
+**Trigger:** `push` to `staging` or `main` — building and pushing an image
+for every unmerged PR commit would spam the registry for no benefit; this
+runs once a promotion actually lands.
+
+1. Build the image (`docker/build-push-action@v7`, loaded locally, not yet
+   pushed).
+2. `aquasecurity/trivy-action@v0.36.0` scans it for CRITICAL/HIGH
+   vulnerabilities, uploads results to the repo's Security tab
+   (`github/codeql-action/upload-sarif`), and **fails the job** if any are
+   found.
+3. Only if the scan passed: push to `ghcr.io/<repo>` (GitHub Container
+   Registry — uses the repo's own `GITHUB_TOKEN`, no new secret needed),
+   tagged by commit SHA and branch name.
+
+No vulnerable image is ever pushed — the scan gates the push, not the
+other way around. Requires the `Dockerfile` to actually run `prisma
+generate` before `build`/`prune` (it didn't — fixed as part of this work;
+see `IMPLEMENTATION.md`).
+
+### Explicitly not built here — needs infrastructure decisions first
+
+`deploy-dev.yml` / `deploy-staging.yml` / `deploy-prod.yml` (hosting
+provider, existing accounts/projects, environment URLs, whether `main`
+gets a manual-approval gate) and Playwright E2E (nothing meaningful to
+test yet — no real frontend↔backend integration exists until the
+frontend's Phase 2+ lands). Writing either now would mean CI that
+references infrastructure or test scenarios that don't exist — worse than
+not having the job at all.
 
 See the frontend's `PLAN.md` §6 for its (smaller, no-database) version of
 this same plan.
