@@ -44,7 +44,8 @@ Expanded significantly past the original plan after the user reviewed the first 
 
 - [x] Build → Trivy scan (CRITICAL/HIGH, fails the job) → upload SARIF to the Security tab → push to GHCR **only if the scan passed** (image is built+scanned before the push step ever runs)
 
-- [ ] **Not yet verified against a real PR/push** — implemented and pushed, but GitHub Actions itself running it for real (and the Docker workflow specifically, which needs an actual push to `staging`/`main`) can't be confirmed from here. Check the first real run before trusting it as a hard gate.
+- [x] **Verified against a real PR: first run surfaced the `pnpm-workspace.yaml` bug above** (6/7 checks failed), now fixed and pushed. Re-run not yet observed from here — check it actually goes green before trusting the gate.
+- [ ] `docker.yml` specifically still unverified — needs an actual push to `staging`/`main`, which hasn't happened yet.
 - [ ] Tell the user to mark the CI jobs as required status checks on `dev`, `staging`, and `main` in GitHub repo settings — **immediate next step once this PR merges**
 - [x] **Confirmed with the user (2026-09-15): hosting not decided yet — `deploy-dev.yml`/`deploy-staging.yml`/`deploy-prod.yml` stay unbuilt for now.** Not a gap: everything built today (CI gates, Docker build+Trivy-scan+push to GHCR) stands on its own — the eventual deploy step just picks up the already-published, already-scanned image. Revisit once a hosting target is chosen; don't re-litigate the "why wasn't this built" question, it's answered here.
 - [ ] Playwright E2E — still deferred, unrelated to the hosting question: nothing to meaningfully test until the frontend has a real login flow (its Phase 3).
@@ -160,6 +161,20 @@ Expanded significantly past the original plan after the user reviewed the first 
 
 ## Deviations / decisions made during implementation
 
+- **First real CI run: 6 of 7 checks failed with `ERROR packages field
+missing or empty` from `pnpm store path --silent`.** Root cause:
+  `pnpm-workspace.yaml` (added this session, originally just to hold
+  `allowBuilds`/`onlyBuiltDependencies` after `pnpm approve-builds`
+  rewrote it) had no `packages:` field. **pnpm 12 (installed locally this
+  session) tolerates that; pnpm 9 (what `pnpm/action-setup` installs per
+  this workflow's pinned version) does not** — reproduced locally with
+  `npx pnpm@9 store path --silent` before fixing, confirmed fixed after
+  adding `packages: ["."]`, then confirmed a full `pnpm install
+--frozen-lockfile` succeeds end-to-end under pnpm 9 in an isolated copy.
+  This one file explains all 6 failures at once: every job except
+  `secret-scan` calls `pnpm/action-setup`, which runs `store path`
+  internally before any job-specific step executes — one broken config
+  file took down the entire pnpm-dependent half of the workflow in one shot.
 - **Created `dev` and `staging` branches (from `main`) and pushed both to
   origin**, alongside the same in the sibling `admin-dashboard-nextjs`
   repo — the three-tier `feature/* → dev → staging → main` workflow
