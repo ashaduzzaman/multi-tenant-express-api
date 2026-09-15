@@ -25,6 +25,9 @@ export class AppError extends Error {
     this.statusCode = options.statusCode ?? 500;
     this.code = options.code ?? 'INTERNAL_ERROR';
     this.details = options.details;
+    // @types/node declares this unconditionally, but it's a V8-only API —
+    // optional chaining is genuine defense for non-V8 engines, not dead code.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     Error.captureStackTrace?.(this, this.constructor);
   }
 }

@@ -1,6 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import pinoHttp from 'pino-http';
+import pinoHttpImport from 'pino-http';
+import type { HttpLogger, Options } from 'pino-http';
 import { logger } from '#/lib/logger.js';
+
+// pino-http's shipped .d.ts declares an ESM-style `export default` inside a
+// package TS resolves as CommonJS format (no package.json "type" field), so
+// under `moduleResolution: NodeNext` the default import's inferred type is
+// the whole module namespace instead of the callable function — a mismatch
+// between the .d.ts and the real `module.exports = pinoHttp` runtime shape.
+// It IS callable at runtime; this cast just corrects the type at the one
+// place it's used, rather than fighting module resolution globally.
+const pinoHttp = pinoHttpImport as unknown as (opts: Options) => HttpLogger;
 
 export const requestLogger = pinoHttp({
   logger,

@@ -10,11 +10,10 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
  * NOTE: Express 5 forwards rejected promises automatically, so this is mostly
  * defensive / for IDE clarity. Keep using it — it makes intent obvious.
  */
-export function asyncHandler<
-  Req extends Request = Request,
-  Res extends Response = Response,
->(fn: (req: Req, res: Res, next: NextFunction) => Promise<unknown>): RequestHandler {
+export function asyncHandler(
+  fn: (req: Request, res: Response, next: NextFunction) => Promise<unknown>,
+): RequestHandler {
   return (req, res, next) => {
-    Promise.resolve(fn(req as Req, res as Res, next)).catch(next);
+    Promise.resolve(fn(req, res, next)).catch(next);
   };
 }

@@ -1,21 +1,17 @@
 import type { NextFunction, Request, Response } from 'express';
-import { jwtVerify } from 'jose';
-import { z } from 'zod';
 import { env } from '#/config/env.js';
 import { UnauthorizedError } from '#/lib/errors.js';
-
-const jwtPayloadSchema = z.object({
-  sub: z.string().uuid(), // user id
-  tid: z.string().uuid(), // tenant id
-  email: z.string().email(),
-  role: z.enum(['owner', 'admin', 'member']),
-});
-
-const secret = new TextEncoder().encode(env.JWT_SECRET);
+import { verifyAccessToken } from '#/lib/jwt.js';
 
 /**
- * Verifies the Bearer token and attaches `req.auth`.
- * Does NOT set the tenant RLS context — that's `tenantContextMiddleware`'s job.
+ * Verifies the access token and attaches `req.auth`. Does NOT set the tenant
+ * RLS context — that's `tenantContextMiddleware`'s job — and does NOT load
+ * permissions — that's `loadPermissions`'s job. Keeping these separate means
+ * a route that only needs identity (e.g. `GET /me`) doesn't pay for a
+ * permission-cache lookup it never uses.
+ *
+ * Reads the token from the access-token cookie first, falling back to
+ * `Authorization: Bearer` for non-browser clients (CLIs, mobile, server-to-server).
  */
 export async function authMiddleware(
   req: Request,
@@ -23,46 +19,37 @@ export async function authMiddleware(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const header = req.headers.authorization;
-    if (!header?.startsWith('Bearer ')) {
-      throw new UnauthorizedError('Missing or malformed Authorization header');
+    const token = extractToken(req);
+    if (!token) {
+      throw new UnauthorizedError('Missing access token');
     }
-    const token = header.slice('Bearer '.length).trim();
-    if (!token) throw new UnauthorizedError('Empty bearer token');
 
-    const { payload } = await jwtVerify(token, secret, {
-      issuer: env.JWT_ISSUER,
-      audience: env.JWT_AUDIENCE,
-    });
-
-    const claims = jwtPayloadSchema.safeParse(payload);
-    if (!claims.success) {
-      throw new UnauthorizedError('Invalid token claims');
-    }
+    const claims = await verifyAccessToken(token);
 
     req.auth = {
-      userId: claims.data.sub,
-      tenantId: claims.data.tid,
-      email: claims.data.email,
-      role: claims.data.role,
+      userId: claims.sub,
+      tenantId: claims.tid,
+      email: claims.email,
+      roleId: claims.rid,
     };
     next();
   } catch (err) {
-    if (err instanceof UnauthorizedError) return next(err);
-    next(new UnauthorizedError('Invalid or expired token'));
+    next(err instanceof UnauthorizedError ? err : new UnauthorizedError('Invalid or expired token'));
   }
 }
 
-/**
- * Role-gating helper. Mount AFTER authMiddleware.
- *   router.delete('/x', authMiddleware, requireRole('owner', 'admin'), handler)
- */
-export function requireRole(...allowed: Array<'owner' | 'admin' | 'member'>) {
-  return (req: Request, _res: Response, next: NextFunction): void => {
-    if (!req.auth) return next(new UnauthorizedError());
-    if (!allowed.includes(req.auth.role)) {
-      return next(new UnauthorizedError('Insufficient role'));
-    }
-    next();
-  };
+function extractToken(req: Request): string | null {
+  const cookies = req.cookies as Record<string, unknown> | undefined;
+  const cookieToken = cookies?.[env.COOKIE_ACCESS_NAME];
+  if (typeof cookieToken === 'string' && cookieToken.length > 0) {
+    return cookieToken;
+  }
+
+  const header = req.headers.authorization;
+  if (header?.startsWith('Bearer ')) {
+    const bearer = header.slice('Bearer '.length).trim();
+    if (bearer) return bearer;
+  }
+
+  return null;
 }

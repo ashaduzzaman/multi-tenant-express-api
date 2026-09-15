@@ -5,7 +5,14 @@
     "moduleResolution": "NodeNext",
     "lib": ["ES2023"],
     "outDir": "./dist",
-    "rootDir": "./src",
+    // No explicit rootDir here on purpose: this base config's `include`
+    // spans src/scripts/tests/*.config.ts, so a rootDir pinned to "./src"
+    // makes tsc refuse to typecheck anything outside it (TS6059). Left
+    // unset, TS infers the common ancestor of whatever's included — for
+    // `tsc --noEmit` (pnpm typecheck) that's fine since nothing is emitted.
+    // tsconfig.build.json narrows `include` to "src/**/*" only, so its
+    // inferred rootDir is still "./src" and `dist/` comes out the same
+    // shape as before.
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,

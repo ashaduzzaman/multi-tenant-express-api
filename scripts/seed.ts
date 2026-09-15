@@ -1,23 +1,27 @@
-import bcrypt from 'bcrypt';
-import { adminDb, closePools } from '#/db/index.js';
-import { tenants, users } from '#/db/schema.js';
+import { adminPrisma, disconnectAll } from '#/db/client.js';
+import { registerTenantWithOwner } from '#/modules/auth/auth.repo.js';
+import { syncPermissions } from '#/lib/sync-permissions.js';
 import { logger } from '#/lib/logger.js';
 import { env } from '#/config/env.js';
+import bcrypt from 'bcrypt';
 
 /**
- * Idempotent seed. Run repeatedly without producing duplicates.
+ * Idempotent seed. Run repeatedly without producing duplicates or errors.
  *
- * Creates two tenants ("acme" and "globex") with one owner each so you can
- * verify RLS isolation manually:
+ * Creates two tenants ("acme" and "globex"), each fully provisioned with
+ * Owner/Admin/Member roles (via the same `registerTenantWithOwner` the real
+ * /auth/register endpoint uses — no separate seed-only code path to drift
+ * out of sync) and one Owner user, so you can verify RLS isolation manually:
  *
- *   psql $DATABASE_URL -c "BEGIN; \
- *     SELECT set_config('app.current_tenant_id', '<acme uuid>', true); \
+ *   psql $DATABASE_ADMIN_URL -c "BEGIN; \
+ *     SELECT set_config('app.current_tenant_id', '<acme tenant id>', true); \
  *     SELECT count(*) FROM users; COMMIT;"
  *   → returns only acme's user count
  */
 async function main(): Promise<void> {
-  const passwordHash = await bcrypt.hash('Password123!', env.BCRYPT_ROUNDS);
+  await syncPermissions(adminPrisma);
 
+  const passwordHash = await bcrypt.hash('Password123!', env.BCRYPT_ROUNDS);
   const seedData = [
     { slug: 'acme', name: 'Acme Inc.', ownerEmail: 'owner@acme.test', ownerName: 'Acme Owner' },
     {
@@ -29,35 +33,20 @@ async function main(): Promise<void> {
   ];
 
   for (const t of seedData) {
-    const [tenant] = await adminDb
-      .insert(tenants)
-      .values({ slug: t.slug, name: t.name })
-      .onConflictDoUpdate({
-        target: tenants.slug,
-        set: { name: t.name, updatedAt: new Date() },
-      })
-      .returning();
-
-    if (!tenant) {
-      logger.error({ slug: t.slug }, 'failed to upsert tenant');
+    const existing = await adminPrisma.tenant.findUnique({ where: { slug: t.slug } });
+    if (existing) {
+      logger.info({ tenant: t.slug, id: existing.id }, '↩️  tenant already seeded, skipping');
       continue;
     }
 
-    await adminDb
-      .insert(users)
-      .values({
-        tenantId: tenant.id,
-        email: t.ownerEmail,
-        name: t.ownerName,
-        passwordHash,
-        role: 'owner',
-      })
-      .onConflictDoNothing({ target: [users.tenantId, users.email] });
-
-    logger.info({ tenant: tenant.slug, id: tenant.id }, '✅ seeded tenant');
+    const result = await registerTenantWithOwner(
+      { tenantName: t.name, tenantSlug: t.slug, email: t.ownerEmail, name: t.ownerName },
+      passwordHash,
+    );
+    logger.info({ tenant: t.slug, id: result.tenantId }, '✅ seeded tenant');
   }
 
-  await closePools();
+  await disconnectAll();
   logger.info('seed complete. login with Password123!');
 }
 

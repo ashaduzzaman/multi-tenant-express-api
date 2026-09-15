@@ -1,7 +1,5 @@
-import { sql } from 'drizzle-orm';
-import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
-import { appPool } from './index.js';
-import * as schema from './schema.js';
+import type { Prisma } from '@prisma/client';
+import { prisma } from './client.js';
 import { TenantContextError } from '#/lib/errors.js';
 
 /**
@@ -9,87 +7,57 @@ import { TenantContextError } from '#/lib/errors.js';
  * withTenantContext — THE function every request handler uses for DB access
  * ════════════════════════════════════════════════════════════════════════════
  *
- * Acquires a dedicated client, opens a transaction, sets the per-transaction
- * GUC `app.current_tenant_id`, and runs your callback with a Drizzle instance
- * scoped to that transaction. RLS policies on every tenant-scoped table read
- * this GUC and refuse to return rows for any other tenant.
+ * Opens a Prisma interactive transaction (a single reserved connection for
+ * the lifetime of the callback), sets the per-transaction GUC
+ * `app.current_tenant_id`, and runs your callback with a transaction client
+ * scoped to it. RLS policies on every tenant-scoped table read this GUC and
+ * refuse to return rows for any other tenant.
  *
  * Why a transaction?
- *   - `SET LOCAL` is scoped to the current transaction. After COMMIT/ROLLBACK
- *     the GUC is cleared. This is what makes pooled connections safe — there
- *     is no way for tenant A's context to leak into tenant B's next query.
- *   - PgBouncer in transaction mode is also compatible with this pattern for
- *     the same reason.
+ *   - `set_config(name, value, true)` is scoped to the current transaction
+ *     (the third argument means "local"). After commit/rollback the GUC is
+ *     cleared — this is what makes pooled connections safe, and what makes
+ *     PgBouncer in transaction mode compatible.
  *
- * Why parameterize via set_config(name, value, true)?
- *   - `SET LOCAL app.current_tenant_id = $1` doesn't accept parameter binding
- *     in PostgreSQL. `set_config()` does, which keeps us safe from SQL
- *     injection even though tenantId comes from a verified JWT and "should"
- *     be safe.
+ * Why parameterize via set_config() instead of string interpolation?
+ *   - `SET LOCAL app.current_tenant_id = $1` doesn't accept parameter
+ *     binding in PostgreSQL. `set_config()` does. Prisma's tagged-template
+ *     `$executeRaw` parameterizes the interpolated value for us — this is
+ *     NOT string concatenation, even though it reads like it.
  *
  * Usage:
- *   const users = await withTenantContext(req.tenantId!, (tx) =>
- *     tx.select().from(usersTable),
- *   );
+ *   const rows = await withTenantContext(tenantId, (tx) => tx.user.findMany());
  * ════════════════════════════════════════════════════════════════════════════
  */
 export async function withTenantContext<T>(
   tenantId: string,
-  callback: (tx: NodePgDatabase<typeof schema>) => Promise<T>,
+  callback: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
-  if (!tenantId || typeof tenantId !== 'string') {
-    throw new TenantContextError('withTenantContext called without a valid tenantId');
-  }
+  assertTenantId(tenantId, 'withTenantContext');
 
-  const client = await appPool.connect();
-  try {
-    await client.query('BEGIN');
-    // The third arg `true` means "local to this transaction"
-    await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
-
-    const tx = drizzle(client, { schema });
-    const result = await callback(tx);
-
-    await client.query('COMMIT');
-    return result;
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {
-      /* swallow rollback errors so the original error reaches the caller */
-    });
-    throw err;
-  } finally {
-    client.release();
-  }
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
+    return callback(tx);
+  });
 }
 
 /**
- * Read-only variant — same isolation, but uses a READ ONLY transaction so the
- * database refuses any accidental writes. Use for GET handlers.
+ * Read-only variant — same isolation, but the transaction rejects any write
+ * the database sees, independent of application logic. Use for GET handlers.
  */
 export async function withTenantContextReadOnly<T>(
   tenantId: string,
-  callback: (tx: NodePgDatabase<typeof schema>) => Promise<T>,
+  callback: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> {
-  if (!tenantId || typeof tenantId !== 'string') {
-    throw new TenantContextError('withTenantContextReadOnly called without a valid tenantId');
-  }
+  assertTenantId(tenantId, 'withTenantContextReadOnly');
 
-  const client = await appPool.connect();
-  try {
-    await client.query('BEGIN READ ONLY');
-    await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
-
-    const tx = drizzle(client, { schema });
-    const result = await callback(tx);
-
-    await client.query('COMMIT');
-    return result;
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw err;
-  } finally {
-    client.release();
-  }
+  return prisma.$transaction(async (tx) => {
+    // Must be the first statement in the transaction — Postgres rejects
+    // SET TRANSACTION characteristics once a query has already run.
+    await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+    await tx.$executeRaw`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
+    return callback(tx);
+  });
 }
 
 /**
@@ -97,24 +65,22 @@ export async function withTenantContextReadOnly<T>(
  * tenant GUC mechanism works. Does NOT use a real tenant id.
  */
 export async function pingTenantContext(): Promise<boolean> {
-  const client = await appPool.connect();
+  const fakeTenantId = '00000000-0000-0000-0000-000000000000';
   try {
-    await client.query('BEGIN');
-    await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [
-      '00000000-0000-0000-0000-000000000000',
-    ]);
-    const r = await client.query<{ tenant: string | null }>(
-      "SELECT current_setting('app.current_tenant_id', true) as tenant",
-    );
-    await client.query('COMMIT');
-    return r.rows[0]?.tenant === '00000000-0000-0000-0000-000000000000';
+    return await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.current_tenant_id', ${fakeTenantId}, true)`;
+      const rows = await tx.$queryRaw<
+        { tenant: string | null }[]
+      >`SELECT current_setting('app.current_tenant_id', true) as tenant`;
+      return rows[0]?.tenant === fakeTenantId;
+    });
   } catch {
-    await client.query('ROLLBACK').catch(() => {});
     return false;
-  } finally {
-    client.release();
   }
 }
 
-// Re-export sql for migration files that need raw policies
-export { sql };
+function assertTenantId(tenantId: string, fnName: string): void {
+  if (!tenantId || typeof tenantId !== 'string') {
+    throw new TenantContextError(`${fnName} called without a valid tenantId`);
+  }
+}

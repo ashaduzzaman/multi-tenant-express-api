@@ -1,6 +1,6 @@
-import type { ErrorRequestHandler } from 'express';
+import type { ErrorRequestHandler, RequestHandler } from 'express';
 import { ZodError } from 'zod';
-import { AppError, ValidationError } from '#/lib/errors.js';
+import { AppError } from '#/lib/errors.js';
 import { logger } from '#/lib/logger.js';
 
 interface ErrorBody {
@@ -60,14 +60,17 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   res.status(500).json(body);
 };
 
-// 404 handler — mount AFTER all routes
-export const notFoundHandler: ErrorRequestHandler = (_err, _req, res, _next) => {
+// 404 handler — mount AFTER all routes, BEFORE errorHandler.
+//
+// Must be a plain (3-arg) RequestHandler, NOT ErrorRequestHandler. Express
+// decides whether a middleware is an error handler purely by counting its
+// declared parameters (arity 4 = error handler). A 4-arg "404 handler"
+// would only ever run when something upstream calls next(err) — at which
+// point it intercepts EVERY error before errorHandler ever sees it and
+// reports a misleading generic 404 instead of the real error. It only runs
+// for real "nothing matched" cases when it takes no err param at all.
+export const notFoundHandler: RequestHandler = (_req, res) => {
   res.status(404).json({
     error: { code: 'NOT_FOUND', message: 'Route not found' },
   });
 };
-
-// To trigger notFoundHandler from a middleware chain when no route matched
-export function noRouteMatched(): never {
-  throw new ValidationError('Route not found');
-}

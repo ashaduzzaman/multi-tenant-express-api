@@ -1,0 +1,130 @@
+// ════════════════════════════════════════════════════════════════════════════
+// MULTI-TENANT SCHEMA CONVENTIONS — read CLAUDE.md before adding models
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Every tenant-scoped model MUST:
+//   1. Include `tenantId String @map("tenant_id") @db.Uuid` with a relation
+//      to Tenant (`onDelete: Cascade`)
+//   2. Lead every index with tenantId
+//   3. Have its RLS policy hand-added to the generated migration SQL
+//      (see PLAN.md §4 and §6 for the workflow + template)
+//
+// `Tenant` itself has no tenant_id column — it's the root of the graph.
+// `Permission` is a global, code-defined catalog (see src/config/permissions.ts)
+// shared across all tenants — it also has no tenant_id and no RLS policy,
+// only a read-only GRANT for app_user.
+// ════════════════════════════════════════════════════════════════════════════
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_ADMIN_URL")
+}
+
+enum TenantStatus {
+  active
+  suspended
+  deleted
+}
+
+model Tenant {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slug      String       @unique @db.VarChar(64)
+  name      String       @db.VarChar(255)
+  status    TenantStatus @default(active)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  users           User[]
+  roles           Role[]
+  rolePermissions RolePermission[]
+  refreshTokens   RefreshToken[]
+
+  @@map("tenants")
+}
+
+model User {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email        String    @db.VarChar(255)
+  passwordHash String    @map("password_hash")
+  name         String    @db.VarChar(255)
+  roleId       String    @map("role_id") @db.Uuid
+  role         Role      @relation(fields: [roleId], references: [id])
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz
+
+  refreshTokens RefreshToken[]
+
+  @@unique([tenantId, email], map: "idx_users_tenant_email")
+  @@index([tenantId, createdAt], map: "idx_users_tenant_created")
+  @@index([tenantId, roleId], map: "idx_users_tenant_role")
+  @@map("users")
+}
+
+/// Global catalog — code-defined in src/config/permissions.ts, synced into
+/// this table at boot. NOT tenant data: no tenant_id, no RLS policy.
+model Permission {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique @db.VarChar(100)
+  resource    String   @db.VarChar(50)
+  action      String   @db.VarChar(50)
+  description String
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model Role {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name      String   @db.VarChar(100)
+  isSystem  Boolean  @default(false) @map("is_system")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  users           User[]
+  rolePermissions RolePermission[]
+
+  @@unique([tenantId, name], map: "idx_roles_tenant_name")
+  @@index([tenantId, createdAt], map: "idx_roles_tenant_created")
+  @@map("roles")
+}
+
+/// Junction table. tenantId is denormalized here (not just reachable via a
+/// role_id join) so RLS can enforce it directly, per this repo's convention
+/// that every tenant-scoped table (including junctions) carries tenant_id.
+model RolePermission {
+  tenantId     String     @map("tenant_id") @db.Uuid
+  tenant       Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  roleId       String     @map("role_id") @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String     @map("permission_id") @db.Uuid
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([tenantId, roleId], map: "idx_role_permissions_tenant_role")
+  @@map("role_permissions")
+}
+
+model RefreshToken {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([tenantId, userId], map: "idx_refresh_tokens_tenant_user")
+  @@map("refresh_tokens")
+}

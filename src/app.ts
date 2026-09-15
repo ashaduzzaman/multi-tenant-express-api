@@ -1,4 +1,5 @@
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { type Application } from 'express';
 import rateLimit from 'express-rate-limit';
@@ -7,6 +8,9 @@ import { env } from '#/config/env.js';
 import { pingTenantContext } from '#/db/tenant-context.js';
 import { errorHandler, notFoundHandler } from '#/middleware/error-handler.js';
 import { requestLogger } from '#/middleware/request-logger.js';
+import { authRouter } from '#/modules/auth/auth.router.js';
+import { rolesRouter } from '#/modules/roles/roles.router.js';
+import { usersRouter } from '#/modules/users/users.router.js';
 
 export function createApp(): Application {
   const app = express();
@@ -27,6 +31,7 @@ export function createApp(): Application {
   app.use(compression());
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+  app.use(cookieParser());
 
   // ─── Logging ────────────────────────────────────────────────────────────
   app.use(requestLogger);
@@ -57,10 +62,12 @@ export function createApp(): Application {
   });
 
   // ─── Feature routes ─────────────────────────────────────────────────────
-  // TODO (Claude Code): mount module routers here, e.g.
-  //   app.use('/api/v1/auth', authRouter);
-  //   app.use('/api/v1/users', authMiddleware, tenantContextMiddleware, usersRouter);
-  // See CLAUDE.md → "Adding a New Feature Module" for the pattern.
+  // Each router owns its own auth/tenant-context/permission middleware
+  // wiring internally (see each module's *.router.ts) rather than repeating
+  // it here — keeps this file a plain index of what's mounted where.
+  app.use('/api/v1/auth', authRouter);
+  app.use('/api/v1/roles', rolesRouter);
+  app.use('/api/v1/users', usersRouter);
 
   // ─── 404 + error handler MUST be last ───────────────────────────────────
   app.use(notFoundHandler);
