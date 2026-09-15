@@ -164,6 +164,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      # `prisma migrate deploy` (below) only applies migrations — it does
+      # NOT generate the client, unlike `migrate dev`. Every other job in
+      # this workflow has its own explicit generate step; this one was
+      # missing it, which is exactly why the first real CI run failed here
+      # with "Cannot find module '.prisma/client/default'" despite all the
+      # other jobs passing this check fine.
+      - run: npx prisma generate
+
       # Mirrors db/init/*.sql (roles + extensions), which only auto-run on a
       # fresh docker volume — the GitHub-managed postgres service doesn't
       # execute them, so we apply the same statements explicitly here.

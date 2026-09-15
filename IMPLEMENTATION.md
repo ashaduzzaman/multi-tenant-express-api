@@ -44,7 +44,9 @@ Expanded significantly past the original plan after the user reviewed the first 
 
 - [x] Build → Trivy scan (CRITICAL/HIGH, fails the job) → upload SARIF to the Security tab → push to GHCR **only if the scan passed** (image is built+scanned before the push step ever runs)
 
-- [x] **Verified against a real PR: first run surfaced the `pnpm-workspace.yaml` bug above** (6/7 checks failed), now fixed and pushed. Re-run not yet observed from here — check it actually goes green before trusting the gate.
+- [x] **Verified against a real PR: first run surfaced the `pnpm-workspace.yaml` bug above** (6/7 checks failed), fixed.
+- [x] **Second real run surfaced a second bug: the `test` job never ran `prisma generate`**, unlike every other job. `prisma migrate deploy` only applies migrations — it does not generate the client, unlike `migrate dev`. Result: `Cannot find module '.prisma/client/default'`, 13/23 test files failing. Reproduced locally first (deleted the generated client, confirmed the exact same error), then confirmed `npx prisma generate` fixes it and the full suite goes back to 172/172. Added the missing step.
+- [ ] Re-run not yet observed from here after this second fix — check it actually goes green before trusting the gate.
 - [ ] `docker.yml` specifically still unverified — needs an actual push to `staging`/`main`, which hasn't happened yet.
 - [ ] Tell the user to mark the CI jobs as required status checks on `dev`, `staging`, and `main` in GitHub repo settings — **immediate next step once this PR merges**
 - [x] **Confirmed with the user (2026-09-15): hosting not decided yet — `deploy-dev.yml`/`deploy-staging.yml`/`deploy-prod.yml` stay unbuilt for now.** Not a gap: everything built today (CI gates, Docker build+Trivy-scan+push to GHCR) stands on its own — the eventual deploy step just picks up the already-published, already-scanned image. Revisit once a hosting target is chosen; don't re-litigate the "why wasn't this built" question, it's answered here.
