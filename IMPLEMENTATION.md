@@ -104,9 +104,16 @@ port 5433.
 - [!] **Found and fixed a second real bug while smoke-testing:** none this time — the notFoundHandler bug (Phase 6) was the only one; the live smoke test passed cleanly on the first try after wiring.
 
 ## Phase 11 — Final verification
-- [ ] `pnpm typecheck`
-- [ ] `pnpm lint`
-- [ ] `pnpm test` (full suite, coverage report reviewed)
+- [x] `pnpm typecheck` — clean. Fixed a **pre-existing** scaffold bug on the way: base `tsconfig.json` had `rootDir: "./src"` while also `include`-ing `scripts/`, `tests/`, and `*.config.ts` — a structural conflict (TS6059) that would have failed on day one of the scaffold, not something introduced this pass. Removed the explicit `rootDir` (TS infers it per-config now); `tsconfig.build.json`'s narrower `include: ["src/**/*"]` still infers `rootDir: "./src"` on its own, so `dist/` output shape is unchanged.
+- [x] `pnpm lint` — clean (0 errors, 0 warnings). Fixed a mix of pre-existing and newly-introduced issues:
+  - Pre-existing, unrelated to this pass: `eslint.config.js` itself wasn't covered by the TS project service (added `allowDefaultProject`); `tseslint.config()` is deprecated in the installed typescript-eslint version (migrated to ESLint core's `defineConfig`); stale/unnecessary `eslint-disable` comments in `env.ts` and `express.d.ts`; a couple of `no-unnecessary-*`/`no-non-null-assertion`/`no-confusing-void-expression` violations in `async-handler.ts`, `errors.ts`, `pagination.ts`, `middleware/tenant-context.ts` that the strict-type-checked ESLint preset was never actually run against before (no evidence in the repo that `pnpm lint` had ever been executed clean).
+  - `pino-http`'s shipped `.d.ts` resolves to an uncallable type under `moduleResolution: NodeNext` (declares `export default` in what TS treats as a CommonJS-format file) — cast at the one usage site in `request-logger.ts`, documented inline.
+  - Introduced by this pass, now fixed: a non-null assertion in `auth.repo.ts`, a void-expression issue in `permission-cache.ts`, two `require-await` violations in test stubs, and Express 5's `req.params` now typing values as `string | string[]` — added a small `requireParam()` helper (`src/lib/request-params.ts`) instead of asserting.
+  - Added an ESLint override (test files only) turning off `no-unsafe-*` for Supertest's untyped `res.body` — standard practice, does not touch `src/` strictness.
+- [x] `pnpm test` — **172/172 passing**, 23 test files, **96.23% statement / 88.99% branch coverage** (floor is 70%; auth/roles/users modules are 95–100%).
+- [x] Added two more test files while closing coverage gaps found during this phase: `src/app.test.ts` (smoke tests `createApp()` itself — `/healthz`, `/readyz`, an unmapped-route 404, and that `/api/v1/auth/register` plus the roles/users routers are actually reachable through the real app factory, not just each module's own standalone test app) and `src/middleware/error-handler.test.ts` (unit tests for every branch of `errorHandler` — ZodError, <500 AppError, ≥500 AppError, unknown error — plus a regression guard asserting `notFoundHandler.length === 2` and `errorHandler.length === 4`, directly protecting against the exact arity bug class found in Phase 6).
+
+**Final state: typecheck clean, lint clean, 172/172 tests passing, 96.23% coverage. Full stack manually smoke-tested live (register → me → list roles → list users → refresh → logout) against the dev database on a scratch port, in addition to the automated Supertest suites.**
 
 ## Deviations / decisions made during implementation
 

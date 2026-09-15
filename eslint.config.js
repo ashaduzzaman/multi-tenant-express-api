@@ -1,7 +1,8 @@
+import { defineConfig } from 'eslint/config';
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
-export default tseslint.config(
+export default defineConfig(
   {
     ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'db/migrations/**'],
   },
@@ -11,7 +12,9 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        projectService: true,
+        projectService: {
+          allowDefaultProject: ['eslint.config.js'],
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },
@@ -46,6 +49,13 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',
       'no-console': 'off',
+      // Supertest's `res.body` is untyped (`any`) by design — asserting on
+      // it is the entire point of an E2E test. Relaxing these here, and
+      // only here, keeps the strict-by-default posture for src/.
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
     },
   },
 );

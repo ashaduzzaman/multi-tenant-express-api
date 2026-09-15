@@ -4,7 +4,7 @@ Multi-tenant SaaS API **starter kit**. Express 5 + TypeScript + PostgreSQL with 
 
 Ships with three working modules, not just a scaffold: **auth** (register/login/refresh/logout/me, cookie-based with refresh rotation), **roles** (tenant-scoped custom roles + a granular permission catalog), and **users** (CRUD, soft delete).
 
-> **For Claude Code:** read [`CLAUDE.md`](./CLAUDE.md) before writing any feature code — it defines the architectural rules that make multi-tenancy safe. Also read [`PLAN.md`](./PLAN.md) (design decisions) and [`IMPLEMENTATION.md`](./IMPLEMENTATION.md) (build log) — they're living documents, not one-time planning artifacts.
+> **For Claude Code:** read [`CLAUDE.md`](./CLAUDE.md) before writing any feature code — it defines the architectural rules that make multi-tenancy safe. Also read [`PLAN.md`](./PLAN.md) (design decisions), [`IMPLEMENTATION.md`](./IMPLEMENTATION.md) (build log), and [`MODULES.md`](./MODULES.md) (what's shipped vs. not, across the full set of modules a multi-tenant SaaS needs) — they're living documents, not one-time planning artifacts.
 
 ## Quickstart
 

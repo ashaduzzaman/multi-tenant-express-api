@@ -21,11 +21,12 @@ export function tenantContextMiddleware(
   next: NextFunction,
 ): void {
   if (!req.auth) {
-    return next(
+    next(
       new TenantContextError(
         'tenantContextMiddleware ran before authMiddleware (or auth was skipped)',
       ),
     );
+    return;
   }
   req.tenantId = req.auth.tenantId;
   next();

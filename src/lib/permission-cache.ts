@@ -19,7 +19,9 @@ export class PermissionCache {
 
   constructor(ttlMs = 5 * 60 * 1000) {
     this.ttlMs = ttlMs;
-    this.sweepInterval = setInterval(() => this.sweepExpired(), ttlMs).unref();
+    this.sweepInterval = setInterval(() => {
+      this.sweepExpired();
+    }, ttlMs).unref();
   }
 
   async getPermissions(

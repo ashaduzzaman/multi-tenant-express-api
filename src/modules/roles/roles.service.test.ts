@@ -49,7 +49,7 @@ describe('RolesService.update', () => {
     const service = new RolesService(repo);
 
     // Warm the cache so we can prove invalidation actually happened.
-    await permissionCache.getPermissions(tenantId, role.id, async () => ['stale']);
+    await permissionCache.getPermissions(tenantId, role.id, () => Promise.resolve(['stale']));
 
     await service.update(tenantId, role.id, { permissionIds: ['p1'] });
 
@@ -68,7 +68,7 @@ describe('RolesService.update', () => {
     });
     const service = new RolesService(repo);
 
-    await permissionCache.getPermissions(tenantId, role.id, async () => ['cached']);
+    await permissionCache.getPermissions(tenantId, role.id, () => Promise.resolve(['cached']));
     await service.update(tenantId, role.id, { name: 'Renamed' });
 
     const fetcher = vi.fn().mockResolvedValue(['should-not-be-called']);

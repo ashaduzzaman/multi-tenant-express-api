@@ -3,7 +3,7 @@
 > **Read this file in full before writing any code in this repo.**
 > It encodes architectural rules that, if violated, cause cross-tenant data leaks, RLS bypasses, or migration corruption. None of these failures are obvious in PR review unless you know what you're looking for.
 >
-> **Also read `PLAN.md` and `IMPLEMENTATION.md`** before starting new work. `PLAN.md` is the architecture/design record (why things are shaped the way they are — e.g. why login takes a `tenantSlug`, why two admin-bypass reads are sanctioned). `IMPLEMENTATION.md` is the phase-by-phase build log, including bugs found and fixed along the way. Keep both up to date as you go — they are the project's memory across sessions, not one-off planning artifacts to discard once "done."
+> **Also read `PLAN.md`, `IMPLEMENTATION.md`, and `MODULES.md`** before starting new work. `PLAN.md` is the architecture/design record (why things are shaped the way they are — e.g. why login takes a `tenantSlug`, why two admin-bypass reads are sanctioned). `IMPLEMENTATION.md` is the phase-by-phase build log, including bugs found and fixed along the way. `MODULES.md` tracks, across the full set of modules a multi-tenant SaaS needs (tenancy, identity, billing, platform services, observability, admin, product surface), which ones exist here and which don't yet — check it before assuming a module is or isn't built. Keep all three up to date as you go — they are the project's memory across sessions, not one-off planning artifacts to discard once "done."
 
 ---
 

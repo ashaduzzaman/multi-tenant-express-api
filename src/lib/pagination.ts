@@ -24,8 +24,12 @@ export function parsePaginationParams(req: Request, allowedSorts: string[]): Pag
   const pageSizeRaw = parseInt(req.query.pageSize as string, 10);
   const pageSize = Math.min(100, Math.max(1, Number.isNaN(pageSizeRaw) ? 20 : pageSizeRaw));
 
+  const defaultSort = allowedSorts[0];
+  if (defaultSort === undefined) {
+    throw new Error('parsePaginationParams requires at least one allowed sort column');
+  }
   const sortRaw = req.query.sort as string;
-  const sort = allowedSorts.includes(sortRaw) ? sortRaw : allowedSorts[0]!;
+  const sort = allowedSorts.includes(sortRaw) ? sortRaw : defaultSort;
   const order = req.query.order === 'desc' ? 'desc' : 'asc';
   return { page, pageSize, sort, order };
 }

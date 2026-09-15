@@ -74,7 +74,10 @@ export async function registerTenantWithOwner(
         });
       }
 
-      const ownerRoleId = roleIdByName.get('Owner')!;
+      const ownerRoleId = roleIdByName.get('Owner');
+      if (ownerRoleId === undefined) {
+        throw new Error('Owner role was not created during tenant provisioning');
+      }
       const ownerUser = await tx.user.create({
         data: {
           tenantId: tenant.id,
