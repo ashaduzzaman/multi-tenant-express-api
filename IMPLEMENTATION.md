@@ -46,7 +46,8 @@ Expanded significantly past the original plan after the user reviewed the first 
 
 - [ ] **Not yet verified against a real PR/push** — implemented and pushed, but GitHub Actions itself running it for real (and the Docker workflow specifically, which needs an actual push to `staging`/`main`) can't be confirmed from here. Check the first real run before trusting it as a hard gate.
 - [ ] Tell the user to mark the CI jobs as required status checks on `dev`, `staging`, and `main` in GitHub repo settings — **immediate next step once this PR merges**
-- [ ] **Deliberately not built — needs the user's infrastructure decisions first:** `deploy-dev.yml`/`deploy-staging.yml`/`deploy-prod.yml` (hosting provider? existing accounts? approval gates on prod?) and Playwright E2E (nothing to meaningfully test yet — no real frontend↔backend integration exists until the frontend's Phase 2+). Fabricating either would mean shipping CI that references infrastructure or test scenarios that don't exist.
+- [x] **Confirmed with the user (2026-09-15): hosting not decided yet — `deploy-dev.yml`/`deploy-staging.yml`/`deploy-prod.yml` stay unbuilt for now.** Not a gap: everything built today (CI gates, Docker build+Trivy-scan+push to GHCR) stands on its own — the eventual deploy step just picks up the already-published, already-scanned image. Revisit once a hosting target is chosen; don't re-litigate the "why wasn't this built" question, it's answered here.
+- [ ] Playwright E2E — still deferred, unrelated to the hosting question: nothing to meaningfully test until the frontend has a real login flow (its Phase 3).
 
 ## Phase 0 — Planning
 
