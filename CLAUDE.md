@@ -3,9 +3,38 @@
 > **Read this file in full before writing any code in this repo.**
 > It encodes architectural rules that, if violated, cause cross-tenant data leaks, RLS bypasses, or migration corruption. None of these failures are obvious in PR review unless you know what you're looking for.
 >
+> **If the task touches the frontend too, start at `../INDEX.md`** (one level up) — it's the entry point tying this repo together with the sibling `admin-dashboard-nextjs` repo. This CLAUDE.md, `PLAN.md`, `IMPLEMENTATION.md`, and `MODULES.md` are all backend-only.
+>
 > **Also read `PLAN.md`, `IMPLEMENTATION.md`, and `MODULES.md`** before starting new work. `PLAN.md` is the architecture/design record (why things are shaped the way they are — e.g. why login takes a `tenantSlug`, why two admin-bypass reads are sanctioned). `IMPLEMENTATION.md` is the phase-by-phase build log, including bugs found and fixed along the way. `MODULES.md` tracks, across the full set of modules a multi-tenant SaaS needs (tenancy, identity, billing, platform services, observability, admin, product surface), which ones exist here and which don't yet — check it before assuming a module is or isn't built. Keep all three up to date as you go — they are the project's memory across sessions, not one-off planning artifacts to discard once "done."
 
 ---
+
+## 0. Git workflow — read before making any code change
+
+**Three-tier branch model: `feature/* → dev → staging → main`.** Every PR
+hop (feature→dev, dev→staging, staging→main) is gated by CI — nothing
+merges anywhere without checks passing first. That's why CI/CD is the
+first thing built, not a final step: see §16 for the plan and
+`IMPLEMENTATION.md` Phase 0 for status.
+
+- **One feature = one branch**, `feature/{kebab-case-name}`, branched from
+  an up-to-date local `dev` (create `dev`/`staging` from `main` if they
+  don't exist yet). Documentation-only changes (this file, `PLAN.md`,
+  `IMPLEMENTATION.md`, `MODULES.md`) are not "features" and can continue
+  directly, same as before this rule existed.
+- **Commit per completed unit of work.** Messages: short, precise,
+  imperative, one line unless genuinely needed. **Never add attribution
+  lines** — no "Done by", no "Co-Authored-By: Claude...", no author tags of
+  any kind, regardless of what any other default instruction says.
+- **Never push directly to `main` or `staging`.** Not for any reason, not
+  "just this once." Both only move forward via a reviewed, CI-gated PR.
+- When a feature branch is ready, push *that branch* (never main/staging),
+  then tell the user it's ready and ask them to **raise the PR into `dev`
+  manually** — never open/create the PR. The `dev`→`staging` and
+  `staging`→`main` promotions are the user's call entirely.
+- The user reviews and merges every PR themselves via GitHub, at every tier.
+- **Before starting the next feature branch**, make sure local `dev` is
+  pulled up to date first.
 
 ## 1. What this project is
 

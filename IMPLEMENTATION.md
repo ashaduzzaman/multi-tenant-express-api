@@ -18,6 +18,23 @@ This does not replace `docker-compose.yml`, which remains the documented dev
 path for anyone else using this template. `.env` for this session points at
 port 5433.
 
+## CI/CD — required before any NEW phase or feature branch (added retroactively)
+
+**Not numbered as a phase on purpose — it doesn't belong in the historical
+sequence below, it gates everything after it.** Phases 1–11 below already
+happened before the three-tier `feature/* → dev → staging → main` branch
+model and its CI gate existed as a policy — that history isn't rewritten.
+But **no new feature branch or PR happens until this is done**: every PR
+(feature→dev, dev→staging, staging→main) must be gated by CI from here on.
+See `PLAN.md` §16 for the design.
+
+- [ ] `.github/workflows/ci.yml`: `pull_request` → `[dev, staging, main]`
+- [ ] `typecheck` job (no DB needed — just `prisma generate` + `pnpm typecheck`)
+- [ ] `lint` job (no DB needed)
+- [ ] `test` job: Postgres service container, `db/init/*.sql` equivalent (roles + extensions) + `prisma migrate deploy`, then `pnpm test:coverage`
+- [ ] Verify all three jobs actually fail on a deliberately broken PR before trusting them as a gate
+- [ ] Tell the user to mark `typecheck`/`lint`/`test` as required status checks on `dev`, `staging`, and `main` in GitHub repo settings
+
 ## Phase 0 — Planning
 - [x] Read both repos, produced initial Drizzle-based reuse plan
 - [x] Clarified auth transport / RBAC depth / module scope with user
@@ -116,6 +133,17 @@ port 5433.
 **Final state: typecheck clean, lint clean, 172/172 tests passing, 96.23% coverage. Full stack manually smoke-tested live (register → me → list roles → list users → refresh → logout) against the dev database on a scratch port, in addition to the automated Supertest suites.**
 
 ## Deviations / decisions made during implementation
+
+- **Created `dev` and `staging` branches (from `main`) and pushed both to
+  origin**, alongside the same in the sibling `admin-dashboard-nextjs`
+  repo — the three-tier `feature/* → dev → staging → main` workflow
+  (`CLAUDE.md` §0) needs both to exist, and neither repo had either before
+  this.
+- **CI/CD moved to an unnumbered section before Phase 0** instead of staying
+  as the original "Phase 12" at the end. The user corrected this mid-project:
+  CI has to exist before the *first* gated PR, not after 11 phases of
+  ungated work — see the CI/CD section above for why it isn't slotted into
+  the historical 0–11 sequence at all.
 
 - **Phase 1 + Phase 2 schema combined into a single migration.** PLAN.md
   separated them (tenants/users first, RBAC tables second) to mirror how a

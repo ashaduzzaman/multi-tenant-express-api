@@ -77,7 +77,15 @@ Nothing in this category exists yet. It's a big, mostly self-contained slice (St
 
 ## 7. Product surface
 
-Not applicable in the current form — **this repo is an API-only starter kit, no frontend.** Onboarding wizard, settings UI, and in-app help are frontend concerns that would live in a companion app consuming this API.
+🚧 **A frontend now exists** — `express-next-saas/admin-dashboard-nextjs`, a sibling repo (not part of this one; no shared VCS). As of this writing it is a **disconnected, generic UI template** with zero integration against this API: no auth pages, no API client, no env vars, every number on screen is hardcoded or client-side-simulated. Its content (infra-monitoring metrics, throughput charts) doesn't correspond to any module in this file either — only Users/Roles/Auth map cleanly onto what it currently renders.
+
+The cross-repo sync plan, the integration architecture decision (Next.js server-side proxy, to keep this API's httpOnly cookies working without fighting CORS), and the phased wiring plan live in that repo's `PLAN.md` and `IMPLEMENTATION.md`. Start at `express-next-saas/INDEX.md` — that's the entry point tying both repos together. Update *that* file's status table when this repo's or the frontend's overall state changes enough to make its summary stale.
+
+| Module | Status | Notes |
+|---|---|---|
+| Onboarding wizard | ⬜ Not started | No register/login UI exists in the frontend yet. |
+| Workspace settings UI | ⬜ Not started | The frontend has a Settings page shell (API Keys, Access Control, Danger Zone) but none of it is wired to this backend, and two of those three sections (API keys, access control) have no backend module to wire to at all. |
+| Help center / in-app support | ⬜ Not started | |
 
 ---
 

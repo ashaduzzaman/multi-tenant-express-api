@@ -422,3 +422,47 @@ See `IMPLEMENTATION.md` for the live checklist. Order:
 9. Seed script (tenants + default roles + owner user).
 10. Wire into `app.ts`, update `CLAUDE.md`/`README.md`/`modules/README.md`.
 11. Full suite: `npm run typecheck && npm run lint && npm test`.
+
+## 16. CI/CD — GitHub Actions gating every PR (`dev`, `staging`, `main`)
+
+**Priority zero, not a final step** — corrected mid-project: the three-tier
+`feature/* → dev → staging → main` model needs CI passing at *every* hop
+before this repo's other phases resume normal feature-branch work. Per the
+git-workflow rule (`CLAUDE.md` §0), this is its own
+`feature/ci-github-actions` branch, PR'd for review like any other feature
+— but it goes first.
+
+- **Trigger:** `pull_request` targeting `dev`, `staging`, **or** `main` —
+  one workflow, three target branches, same checks at every promotion.
+- **Needs a real Postgres**, per this project's own testing philosophy
+  (`CLAUDE.md` §9 — repo/integration tests hit a real DB, never mocked).
+  Use a `services: postgres:` container in the workflow (same image as
+  `docker-compose.yml`, `postgres:17-alpine`), then in a setup step: run
+  `db/init/*.sql` (creates `app_user` + extensions) and
+  `npx prisma migrate deploy` against a `multitenant_test` database —
+  mirroring exactly what `.env.test` + this session's throwaway local
+  cluster did during development (see `IMPLEMENTATION.md`'s "Local dev/test
+  environment note").
+- **Jobs:**
+  1. `typecheck` — `pnpm install --frozen-lockfile && pnpm typecheck`.
+  2. `lint` — `pnpm lint` (`eslint --max-warnings=0`, already zero-tolerance
+     locally — CI should hold the same bar, not a looser one).
+  3. `test` — `pnpm test` (or `test:coverage`) against the Postgres service.
+     `vitest.config.ts`'s coverage thresholds (70% floor, §10) already fail
+     the run below that bar — CI gets that enforcement for free, no extra
+     config needed.
+- **Env vars for the job:** dummy-but-valid values matching `.env.test`'s
+  shape (`JWT_SECRET` ≥32 chars, `DATABASE_URL`/`DATABASE_ADMIN_URL`
+  pointing at the ephemeral service container, low `BCRYPT_ROUNDS` isn't
+  required in CI the way it was for fast local iteration, but doesn't hurt).
+  None of these are real secrets — the Postgres instance is destroyed with
+  the runner.
+- **Node/pnpm version:** Node 22 (per `engines` in `package.json`), pnpm via
+  `pnpm/action-setup` matching the `>=9.0.0` engine constraint.
+- **Branch protection:** once the workflow file exists, the user needs to
+  mark `typecheck`/`lint`/`test` as required status checks on `dev` in
+  GitHub's repo settings — a repo-admin action, not something a workflow
+  file can configure itself.
+
+See the frontend's `PLAN.md` §6 for its (smaller, no-database) version of
+this same plan.
