@@ -1,6 +1,6 @@
-import { adminPrisma, disconnectAll } from '#/db/client.js';
-import { syncPermissions } from '#/lib/sync-permissions.js';
-import { logger } from '#/lib/logger.js';
+import { adminPrisma, disconnectAll } from "#/db/client.js";
+import { syncPermissions } from "#/lib/sync-permissions.js";
+import { logger } from "#/lib/logger.js";
 
 async function main(): Promise<void> {
   await syncPermissions(adminPrisma);
@@ -8,6 +8,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((err: unknown) => {
-  logger.error({ err }, '❌ permission sync failed');
+  logger.error({ err }, "❌ permission sync failed");
   process.exit(1);
 });

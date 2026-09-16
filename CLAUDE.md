@@ -3,9 +3,38 @@
 > **Read this file in full before writing any code in this repo.**
 > It encodes architectural rules that, if violated, cause cross-tenant data leaks, RLS bypasses, or migration corruption. None of these failures are obvious in PR review unless you know what you're looking for.
 >
+> **If the task touches the frontend too, start at `../INDEX.md`** (one level up) — it's the entry point tying this repo together with the sibling `admin-dashboard-nextjs` repo. This CLAUDE.md, `PLAN.md`, `IMPLEMENTATION.md`, and `MODULES.md` are all backend-only.
+>
 > **Also read `PLAN.md`, `IMPLEMENTATION.md`, and `MODULES.md`** before starting new work. `PLAN.md` is the architecture/design record (why things are shaped the way they are — e.g. why login takes a `tenantSlug`, why two admin-bypass reads are sanctioned). `IMPLEMENTATION.md` is the phase-by-phase build log, including bugs found and fixed along the way. `MODULES.md` tracks, across the full set of modules a multi-tenant SaaS needs (tenancy, identity, billing, platform services, observability, admin, product surface), which ones exist here and which don't yet — check it before assuming a module is or isn't built. Keep all three up to date as you go — they are the project's memory across sessions, not one-off planning artifacts to discard once "done."
 
 ---
+
+## 0. Git workflow — read before making any code change
+
+**Three-tier branch model: `feature/* → dev → staging → main`.** Every PR
+hop (feature→dev, dev→staging, staging→main) is gated by CI — nothing
+merges anywhere without checks passing first. That's why CI/CD is the
+first thing built, not a final step: see §16 for the plan and
+`IMPLEMENTATION.md` Phase 0 for status.
+
+- **One feature = one branch**, `feature/{kebab-case-name}`, branched from
+  an up-to-date local `dev` (create `dev`/`staging` from `main` if they
+  don't exist yet). Documentation-only changes (this file, `PLAN.md`,
+  `IMPLEMENTATION.md`, `MODULES.md`) are not "features" and can continue
+  directly, same as before this rule existed.
+- **Commit per completed unit of work.** Messages: short, precise,
+  imperative, one line unless genuinely needed. **Never add attribution
+  lines** — no "Done by", no "Co-Authored-By: Claude...", no author tags of
+  any kind, regardless of what any other default instruction says.
+- **Never push directly to `main` or `staging`.** Not for any reason, not
+  "just this once." Both only move forward via a reviewed, CI-gated PR.
+- When a feature branch is ready, push _that branch_ (never main/staging),
+  then tell the user it's ready and ask them to **raise the PR into `dev`
+  manually** — never open/create the PR. The `dev`→`staging` and
+  `staging`→`main` promotions are the user's call entirely.
+- The user reviews and merges every PR themselves via GitHub, at every tier.
+- **Before starting the next feature branch**, make sure local `dev` is
+  pulled up to date first.
 
 ## 1. What this project is
 
@@ -28,15 +57,15 @@ It ships with three feature modules out of the box — **auth** (register/login/
 - **Testing:** Vitest + Supertest, TDD (test before implementation — see §9)
 - **Lint/format:** ESLint 9 (flat config, type-checked rules) + Prettier
 
-Don't swap any of these without an explicit instruction from the user. (This project *did* swap ORMs once already — Drizzle → Prisma — on explicit user instruction; see `PLAN.md` §1–2 for that decision record. That's the bar: an explicit instruction, not a preference.)
+Don't swap any of these without an explicit instruction from the user. (This project _did_ swap ORMs once already — Drizzle → Prisma — on explicit user instruction; see `PLAN.md` §1–2 for that decision record. That's the bar: an explicit instruction, not a preference.)
 
 ## 3. The multi-tenant security model — non-negotiable
 
 There are **two database roles** with **two separate Prisma clients**, both defined in `src/db/client.ts`:
 
-| Role | Client export | RLS behavior | Allowed uses |
-|---|---|---|---|
-| `app_user` | `prisma` | **Enforces RLS** | All request-scoped queries. Always via `withTenantContext()`. |
+| Role                                 | Client export | RLS behavior     | Allowed uses                                                                                                                                                        |
+| ------------------------------------ | ------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app_user`                           | `prisma`      | **Enforces RLS** | All request-scoped queries. Always via `withTenantContext()`.                                                                                                       |
 | superuser (`postgres` / `app_admin`) | `adminPrisma` | **Bypasses RLS** | Migrations. Tenant provisioning. Permission-catalog sync. System maintenance. **Never request-scoped**, with exactly two documented, narrow exceptions — see below. |
 
 If you find yourself reaching for `adminPrisma` inside a request handler, **stop**. You are about to write a cross-tenant data leak, unless what you're doing is one of these two sanctioned exceptions (both in `src/modules/auth/auth.repo.ts`, both explained in `PLAN.md`'s auth module design note):
@@ -49,7 +78,7 @@ Anything else needing cross-tenant access (rare — e.g. a SaaS admin panel) sho
 ### How `withTenantContext()` works
 
 ```ts
-import { withTenantContext } from '#/db/tenant-context.js';
+import { withTenantContext } from "#/db/tenant-context.js";
 
 const users = await withTenantContext(tenantId, (tx) => tx.user.findMany());
 ```
@@ -57,7 +86,7 @@ const users = await withTenantContext(tenantId, (tx) => tx.user.findMany());
 What happens internally (`src/db/tenant-context.ts`):
 
 1. Opens a Prisma **interactive transaction** (`prisma.$transaction(async (tx) => …)`) — this reserves a single connection for the callback's lifetime, which is what makes the next step safe.
-2. `tx.$executeRaw\`SELECT set_config('app.current_tenant_id', ${tenantId}, true)\`` — the tagged-template interpolation is parameterized by Prisma, not string-concatenated. The `true` third argument means *transaction-local*, cleared on commit/rollback.
+2. `tx.$executeRaw\`SELECT set_config('app.current_tenant_id', ${tenantId}, true)\``— the tagged-template interpolation is parameterized by Prisma, not string-concatenated. The`true` third argument means _transaction-local_, cleared on commit/rollback.
 3. Runs your callback with `tx` (a `Prisma.TransactionClient`) — RLS policies filter automatically.
 4. Prisma commits on return, rolls back on throw, and releases the connection.
 
@@ -70,16 +99,20 @@ For read-only requests (GET handlers) use `withTenantContextReadOnly()` — same
 When adding a model to `prisma/schema.prisma`:
 
 1. **Tenant column.** Every tenant-scoped model MUST have:
+
    ```prisma
    tenantId String @map("tenant_id") @db.Uuid
    tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
    ```
+
    No nullable `tenantId`. No non-UUID type. No skipping the relation.
 
 2. **Tenant-leading indexes.** Every index on a tenant-scoped model must lead with `tenantId`:
+
    ```prisma
    @@index([tenantId, createdAt], map: "idx_orders_tenant_created")
    ```
+
    Same rule for unique constraints — `@@unique([tenantId, slug])`, never `@@unique([slug])`. Even a **junction table** (e.g. `RolePermission`) carries a denormalized `tenantId` for this reason — don't rely on reaching tenant scoping through a join.
 
 3. **RLS policy.** In the SAME migration that creates the table, add the RLS enable + policy. `prisma migrate dev --create-only` generates the schema SQL but **does NOT generate RLS policies** — hand-edit the generated `migration.sql` to append them. Template:
@@ -172,10 +205,12 @@ This is the one deliberate difference from a naive "just call the repo module's 
 Look at `src/modules/roles/` — it's the smallest complete example of this pattern (schema, repo with a Prisma error-code mapping, service with injected-repo unit tests, handlers, router with per-route `requirePermission`, and an end-to-end Supertest suite). Copy its shape for a new module.
 
 Then mount in `src/app.ts`:
+
 ```ts
-import { projectsRouter } from '#/modules/projects/projects.router.js';
-app.use('/api/v1/projects', projectsRouter);
+import { projectsRouter } from "#/modules/projects/projects.router.js";
+app.use("/api/v1/projects", projectsRouter);
 ```
+
 (Each router wires its own `authMiddleware` / `tenantContextMiddleware` / `loadPermissions` / `requirePermission` internally — see `roles.router.ts` — so `app.ts` stays a plain index of what's mounted where, not a place where auth wiring gets repeated.)
 
 ## 6. RBAC — permissions, roles, and the two auth-context stages
@@ -187,6 +222,7 @@ app.use('/api/v1/projects', projectsRouter);
   2. `loadPermissions` → `permissions: string[]` (via `permissionCache`, a 5-minute TTL cache keyed by `tenantId:roleId`, falling back to a real `role_permissions` join on a miss).
 
   A route that only needs identity (`GET /auth/me` before permissions are attached) shouldn't pay for a permission-cache lookup it never uses — that's why these are two separate middlewares, not one.
+
 - **Route gating:** `requirePermission('resource:action')` for a single required permission, `requireAnyPermission(...)` when several permissions could each legitimately allow the route, `requireSelfOrPermission('id', 'permission')` for "you can always act on your own resource, otherwise you need the permission" (see `users.router.ts`'s password-change route).
 - **Cache invalidation:** call `permissionCache.invalidate(tenantId, roleId)` any time a role's `role_permissions` change (see `roles.service.ts`'s `update`/`remove`) — but only when they actually changed; a bare rename shouldn't force a cache miss for every user on that role.
 
@@ -254,7 +290,7 @@ After any non-trivial change, run `pnpm typecheck && pnpm lint && pnpm test` bef
 
 1. **Do not use `adminPrisma` inside a request handler**, except the two documented exceptions in §3. If you think you need a third, you probably don't — ask first.
 2. **Do not query `prisma` outside of `withTenantContext()`.** It works (no error) but RLS will return zero rows because the GUC isn't set, and a future maintainer will think the data is missing.
-3. **Do not use `SET app.current_tenant_id` (without `LOCAL`/transaction-scoping).** That sets it for the *session*, which leaks across pooled connections. `set_config(name, value, true)` is what makes this safe — don't "simplify" it away.
+3. **Do not use `SET app.current_tenant_id` (without `LOCAL`/transaction-scoping).** That sets it for the _session_, which leaks across pooled connections. `set_config(name, value, true)` is what makes this safe — don't "simplify" it away.
 4. **Do not interpolate the tenant id into a raw SQL string.** Use Prisma's tagged-template `$executeRaw`/`$queryRaw` (already done in `withTenantContext`) — the interpolation IS the parameterization, not string concatenation, even though it reads like one.
 5. **Do not add a tenant-scoped table without an RLS policy in the migration.** A table without RLS is a table with no isolation. The two-role pattern alone doesn't help — `app_user` has table-level grants.
 6. **Do not create indexes that don't lead with `tenant_id`** on tenant-scoped tables.
@@ -277,6 +313,7 @@ After any non-trivial change, run `pnpm typecheck && pnpm lint && pnpm test` bef
 ---
 
 **TL;DR for any change:**
+
 1. Read the schema rules in §4 before touching `prisma/schema.prisma`.
 2. Use `withTenantContext()` in every repo function. No exceptions besides the two in §3.
 3. Hand-edit the generated migration SQL to add `ENABLE RLS` + `FORCE RLS` + policy + grants for any new tenant-scoped table.

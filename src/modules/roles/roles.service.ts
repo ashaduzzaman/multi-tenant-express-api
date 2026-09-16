@@ -1,16 +1,29 @@
-import { ConflictError, ForbiddenError, NotFoundError } from '#/lib/errors.js';
-import { permissionCache } from '#/lib/permission-cache.js';
-import type { PaginatedResult, PaginationParams } from '#/lib/pagination.js';
-import * as repo from './roles.repo.js';
-import type { PermissionDto, RoleWithStats } from './roles.repo.js';
-import type { CreateRoleInput, UpdateRoleInput } from './roles.schema.js';
+import { ConflictError, ForbiddenError, NotFoundError } from "#/lib/errors.js";
+import { permissionCache } from "#/lib/permission-cache.js";
+import type { PaginatedResult, PaginationParams } from "#/lib/pagination.js";
+import * as repo from "./roles.repo.js";
+import type { PermissionDto, RoleWithStats } from "./roles.repo.js";
+import type { CreateRoleInput, UpdateRoleInput } from "./roles.schema.js";
 
 export interface RolesRepo {
-  listRoles: (tenantId: string, params: PaginationParams) => Promise<PaginatedResult<RoleWithStats>>;
+  listRoles: (
+    tenantId: string,
+    params: PaginationParams,
+  ) => Promise<PaginatedResult<RoleWithStats>>;
   listPermissionCatalog: (tenantId: string) => Promise<PermissionDto[]>;
-  findRoleById: (tenantId: string, roleId: string) => Promise<RoleWithStats | null>;
-  createRole: (tenantId: string, input: CreateRoleInput) => Promise<RoleWithStats>;
-  updateRole: (tenantId: string, roleId: string, input: UpdateRoleInput) => Promise<RoleWithStats>;
+  findRoleById: (
+    tenantId: string,
+    roleId: string,
+  ) => Promise<RoleWithStats | null>;
+  createRole: (
+    tenantId: string,
+    input: CreateRoleInput,
+  ) => Promise<RoleWithStats>;
+  updateRole: (
+    tenantId: string,
+    roleId: string,
+    input: UpdateRoleInput,
+  ) => Promise<RoleWithStats>;
   deleteRole: (tenantId: string, roleId: string) => Promise<void>;
   countUsersForRole: (tenantId: string, roleId: string) => Promise<number>;
 }
@@ -18,7 +31,10 @@ export interface RolesRepo {
 export class RolesService {
   constructor(private readonly repo: RolesRepo) {}
 
-  async list(tenantId: string, params: PaginationParams): Promise<PaginatedResult<RoleWithStats>> {
+  async list(
+    tenantId: string,
+    params: PaginationParams,
+  ): Promise<PaginatedResult<RoleWithStats>> {
     return this.repo.listRoles(tenantId, params);
   }
 
@@ -26,14 +42,21 @@ export class RolesService {
     return this.repo.listPermissionCatalog(tenantId);
   }
 
-  async create(tenantId: string, input: CreateRoleInput): Promise<RoleWithStats> {
+  async create(
+    tenantId: string,
+    input: CreateRoleInput,
+  ): Promise<RoleWithStats> {
     return this.repo.createRole(tenantId, input);
   }
 
-  async update(tenantId: string, roleId: string, input: UpdateRoleInput): Promise<RoleWithStats> {
+  async update(
+    tenantId: string,
+    roleId: string,
+    input: UpdateRoleInput,
+  ): Promise<RoleWithStats> {
     const existing = await this.repo.findRoleById(tenantId, roleId);
     if (!existing) {
-      throw new NotFoundError('Role not found');
+      throw new NotFoundError("Role not found");
     }
 
     const updated = await this.repo.updateRole(tenantId, roleId, input);
@@ -50,15 +73,17 @@ export class RolesService {
   async remove(tenantId: string, roleId: string): Promise<void> {
     const existing = await this.repo.findRoleById(tenantId, roleId);
     if (!existing) {
-      throw new NotFoundError('Role not found');
+      throw new NotFoundError("Role not found");
     }
     if (existing.isSystem) {
-      throw new ForbiddenError('System roles cannot be deleted');
+      throw new ForbiddenError("System roles cannot be deleted");
     }
 
     const userCount = await this.repo.countUsersForRole(tenantId, roleId);
     if (userCount > 0) {
-      throw new ConflictError(`Cannot delete role: ${userCount} user(s) are assigned to it`);
+      throw new ConflictError(
+        `Cannot delete role: ${userCount} user(s) are assigned to it`,
+      );
     }
 
     await this.repo.deleteRole(tenantId, roleId);

@@ -4,7 +4,7 @@ Multi-tenant SaaS API **starter kit**. Express 5 + TypeScript + PostgreSQL with 
 
 Ships with three working modules, not just a scaffold: **auth** (register/login/refresh/logout/me, cookie-based with refresh rotation), **roles** (tenant-scoped custom roles + a granular permission catalog), and **users** (CRUD, soft delete).
 
-> **For Claude Code:** read [`CLAUDE.md`](./CLAUDE.md) before writing any feature code — it defines the architectural rules that make multi-tenancy safe. Also read [`PLAN.md`](./PLAN.md) (design decisions), [`IMPLEMENTATION.md`](./IMPLEMENTATION.md) (build log), and [`MODULES.md`](./MODULES.md) (what's shipped vs. not, across the full set of modules a multi-tenant SaaS needs) — they're living documents, not one-time planning artifacts.
+> **For Claude Code:** read [`CLAUDE.md`](./CLAUDE.md) before writing any feature code — it defines the architectural rules that make multi-tenancy safe. Also read [`PLAN.md`](./PLAN.md) (design decisions), [`IMPLEMENTATION.md`](./IMPLEMENTATION.md) (build log), and [`MODULES.md`](./MODULES.md) (what's shipped vs. not, across the full set of modules a multi-tenant SaaS needs) — they're living documents, not one-time planning artifacts. If your task also touches the admin dashboard frontend, start at [`../INDEX.md`](../INDEX.md) instead.
 
 ## Quickstart
 
@@ -32,20 +32,21 @@ pnpm dev
 
 App listens on http://localhost:3000.
 
-| Endpoint | Purpose |
-|---|---|
-| `GET /healthz` | Liveness — process is up |
-| `GET /readyz` | Readiness — DB reachable, RLS context works |
-| `POST /api/v1/auth/register` | Create a tenant + Owner user |
-| `POST /api/v1/auth/login` | `{ tenantSlug, email, password }` → sets cookies |
-| `POST /api/v1/auth/refresh` | Rotates the refresh cookie |
-| `POST /api/v1/auth/logout` | Clears cookies, revokes the refresh token |
-| `GET /api/v1/auth/me` | Current user + permissions |
-| `GET/POST/PUT/DELETE /api/v1/roles` | Tenant-scoped custom roles |
-| `GET /api/v1/roles/permissions` | The permission catalog |
+| Endpoint                            | Purpose                                              |
+| ----------------------------------- | ---------------------------------------------------- |
+| `GET /healthz`                      | Liveness — process is up                             |
+| `GET /readyz`                       | Readiness — DB reachable, RLS context works          |
+| `POST /api/v1/auth/register`        | Create a tenant + Owner user                         |
+| `POST /api/v1/auth/login`           | `{ tenantSlug, email, password }` → sets cookies     |
+| `POST /api/v1/auth/refresh`         | Rotates the refresh cookie                           |
+| `POST /api/v1/auth/logout`          | Clears cookies, revokes the refresh token            |
+| `GET /api/v1/auth/me`               | Current user + permissions                           |
+| `GET/POST/PUT/DELETE /api/v1/roles` | Tenant-scoped custom roles                           |
+| `GET /api/v1/roles/permissions`     | The permission catalog                               |
 | `GET/POST/PUT/DELETE /api/v1/users` | User CRUD (`PUT /:id/password` for password changes) |
 
 Try it once the server is up:
+
 ```bash
 curl -c cookies.txt -X POST http://localhost:3000/api/v1/auth/register \
   -H 'Content-Type: application/json' \
