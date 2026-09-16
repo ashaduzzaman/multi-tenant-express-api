@@ -276,3 +276,26 @@ missing or empty` from `pnpm store path --silent`.** Root cause:
   no new dependency needed.
 - **`.gitignore` did not exist.** Added one before creating `.env`/`.env.test`
   so secrets/local DB URLs can't be accidentally committed.
+- **Third CI run: `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` on the "overrides"
+  setting.** Reproduced locally first (`npx pnpm@9 install --frozen-lockfile`
+  in an isolated copy, identical error), then read pnpm 9's own source
+  (`getOptionsFromRootManifest.js`, the function that computes "current
+  overrides") rather than guessing: pnpm 9 reads `overrides` **only** from
+  `package.json`'s `pnpm.overrides` (or `resolutions`) — it never looks at
+  `pnpm-workspace.yaml` for it. pnpm 12 (installed locally) is the opposite:
+  it reads `overrides` only from `pnpm-workspace.yaml` and silently ignores
+  `pnpm.overrides` in `package.json` (same "no longer read by pnpm" warning
+  as the earlier `allowBuilds` move). There is no single file both versions
+  honor for this setting, so whichever pnpm version last ran `install`
+  determines what's in the lockfile's `overrides:` block — the two versions
+  will fight over it forever. Rather than pick a location and have this
+  recur on every future `pnpm install` (this is the second pnpm-9-vs-local
+  config-location incompatibility this session, after the `packages:` field),
+  fixed the actual root cause: **bumped the CI-pinned pnpm version from 9 to
+  12** (`PNPM_VERSION` in `ci.yml`, `corepack prepare pnpm@12` in the
+  `Dockerfile`) to match what's already installed locally and is genuinely
+  latest-stable (confirmed via the npm registry's `latest` dist-tag, not a
+  beta). Regenerated the lockfile under pnpm 12 with `overrides` back in
+  `pnpm-workspace.yaml`, then verified a frozen install succeeds under pnpm
+  12 in an isolated copy, and re-ran the full local suite (typecheck, lint,
+  format:check, audit, all 172 tests) with no regressions.
