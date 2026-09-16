@@ -53,7 +53,10 @@ jobs:
 
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
+          # Must be a tag the image was actually loaded under (see the build
+          # step above) — metadata-action's sha tag is "sha-<full-sha>", not
+          # the bare sha, so it can't be reconstructed by hand here.
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
@@ -64,11 +67,15 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
-      # Only reached if Trivy passed — no vulnerable image ever gets pushed.
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
+      # Only reached if Trivy passed. Pushes the exact image already built,
+      # loaded, and scanned above via plain `docker push` — rebuilding here
+      # instead (even with identical inputs/cache) would mean the image that
+      # ships was never actually the one Trivy scanned. Labels are already
+      # baked into the image from the build step, nothing to reapply here.
+      - name: Push scanned image
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && docker push "$tag"
+          done <<< "$TAGS"
