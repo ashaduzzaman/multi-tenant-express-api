@@ -313,3 +313,17 @@ the docker driver`, followed by the SARIF upload step failing because
   this environment (see above) to run the workflow end-to-end locally; this
   fix is based on reading `docker/build-push-action`'s own documented
   driver/caching constraints, not a local repro.
+- **Docker build: the same `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` on "overrides"
+  reappeared, this time from inside the image build itself**, after already
+  fixing the pnpm-9-vs-12 version of this bug above. Different root cause,
+  same symptom — reproduced by simulating the `deps` stage's exact `COPY`
+  locally (a bare dir with only `package.json` + `pnpm-lock.yaml`, no
+  `pnpm-workspace.yaml`, then `pnpm install --frozen-lockfile`): the
+  Dockerfile's `deps` stage only ever copied `package.json` and
+  `pnpm-lock.yaml*`, never `pnpm-workspace.yaml`. Without that file present,
+  pnpm can't see the `overrides:` block (or `packages:`/`allowBuilds:`)
+  at all, so it computes "current overrides = {}" against a lockfile that
+  has `overrides: {tar, deepmerge-ts}` — an automatic mismatch regardless of
+  pnpm version. Fixed by adding `pnpm-workspace.yaml` to the `deps` stage's
+  `COPY` line. Verified by re-running the same isolated-copy repro with the
+  file present — frozen install succeeds under pnpm 12.
