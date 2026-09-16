@@ -163,6 +163,52 @@ Expanded significantly past the original plan after the user reviewed the first 
 
 ## Deviations / decisions made during implementation
 
+- **`pnpm audit` found 20 real vulnerabilities (2 critical, 10 high, 8
+  moderate)** — reported by the user from a real audit run, then reproduced
+  and root-caused locally. All three clustered into transitive dev/build
+  tooling, not application runtime code:
+  1. **`tar`** (12 advisories, 1 critical) via `bcrypt > @mapbox/node-pre-gyp
+     > tar`— bcrypt's own install-time tooling, several versions behind on
+a heavily-patched package. Fixed with a`pnpm-workspace.yaml` `overrides`entry forcing`tar: ^7.5.22`regardless of what`@mapbox/node-pre-gyp`
+     > declares.
+  2. **`vite`/`esbuild`/`@vitest/mocker`** (7 advisories, 1 critical) via our
+     own `vitest`/`@vitest/coverage-v8` — pinned at `^2.1.8`, several majors
+     behind. Fixed by bumping to `^4.1.11` — the minimum version that's
+     actually patched (there's a 5.x, but 4.1.11 fixes every advisory found
+     without the extra risk of an unnecessary second major jump).
+  3. **`deepmerge-ts`** (1 high) via `prisma > @prisma/config` — again
+     install/CLI-time only, not `@prisma/client`'s runtime path. Fixing this
+     "properly" would mean a Prisma 6→7 major bump, which is far riskier
+     than the vulnerability itself (a DoS via recursive object graphs in a
+     config-loading path with no untrusted-input exposure). Used the same
+     override approach instead: force `deepmerge-ts: ^8.0.0` directly,
+     leaving `prisma` itself at `6.19.3`.
+     `pnpm.overrides` in `package.json` **also** turned out to be silently
+     ignored by this pnpm version — same class of bug as the
+     `onlyBuiltDependencies`/`allowBuilds` move earlier — confirmed via the
+     same "no longer read by pnpm" warning, moved to `pnpm-workspace.yaml`'s
+     `overrides:` key instead. `pnpm audit` now reports 0 vulnerabilities;
+     confirmed the full suite still passes after every change (see below).
+- **The vitest 2→4 bump broke `bcrypt` resolution in tests** — investigated
+  thoroughly before concluding it was a **local environment artifact, not a
+  real bug**: plain `node -e "require('bcrypt')"` failed identically with
+  no vitest involved at all, tracing back to a corrupted local pnpm
+  content-addressable store (bcrypt's package was missing its own
+  `bcrypt.js` — confirmed against the real npm tarball, which does ship
+  it). Wiping the pnpm store (`~/AppData/Local/pnpm/store`) and reinstalling
+  fixed it outright — nothing wrong with vitest 4, this repo's config, or
+  the dependency bump itself. **Kept two defensive vitest.config.ts settings
+  anyway** (`server.deps.external: ['bcrypt']`, `optimizeDeps.exclude:
+['bcrypt']`) since they're Vitest's own documented guidance for native
+  addons regardless of whether they were the actual fix here — harmless,
+  and correct practice going forward.
+- **Added `.prettierignore`** (didn't exist) excluding `pnpm-lock.yaml` and
+  `prisma/migrations` — found because `pnpm-lock.yaml` needed reformatting
+  after all the dependency changes above, and a machine-generated lockfile
+  being subject to Prettier is a recipe for it flip-flopping between "needs
+  formatting" and "clean" on every future `pnpm install`. Migrations get the
+  same treatment for the same reason, and because CLAUDE.md §11 already
+  says not to touch applied migrations at all.
 - **First real CI run: 6 of 7 checks failed with `ERROR packages field
 missing or empty` from `pnpm store path --silent`.** Root cause:
   `pnpm-workspace.yaml` (added this session, originally just to hold
