@@ -300,7 +300,7 @@ missing or empty` from `pnpm store path --silent`.** Root cause:
   12 in an isolated copy, and re-ran the full local suite (typecheck, lint,
   format:check, audit, all 172 tests) with no regressions.
 - **`docker.yml`: `ERROR: failed to build: Cache export is not supported for
-  the docker driver`, followed by the SARIF upload step failing because
+the docker driver`, followed by the SARIF upload step failing because
   `trivy-results.sarif` was never produced.** The second error is just
   fallout from the first — the scan-and-push job never got an image to scan.
   Root cause: `docker/build-push-action` with no preceding
