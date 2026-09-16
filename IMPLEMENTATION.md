@@ -327,3 +327,28 @@ the docker driver`, followed by the SARIF upload step failing because
   pnpm version. Fixed by adding `pnpm-workspace.yaml` to the `deps` stage's
   `COPY` line. Verified by re-running the same isolated-copy repro with the
   file present — frozen install succeeds under pnpm 12.
+- **First real `docker.yml` run got past the build, then Trivy failed:
+  `unable to find the specified image "ghcr.io/.../multi-tenant-express-api:
+<bare-sha>"` in docker/containerd/podman/remote.** The Trivy step's
+  `image-ref` was hand-built as `ghcr.io/${{ github.repository }}:${{
+github.sha }}` — the bare commit SHA. But the image was only ever `load`ed
+  locally (never pushed) under the tags `docker/metadata-action` actually
+  generated: `type=sha,format=long` produces `sha-<full-sha>` (with a `sha-`
+  prefix), not the bare SHA, plus a branch-name tag. No tag matched, so
+  Trivy couldn't find the image anywhere. Fixed by sourcing the ref directly
+  from metadata-action's own JSON output
+  (`fromJSON(steps.meta.outputs.json).tags[0]`) instead of reconstructing it
+  by hand, so it can't drift from whatever tags the build step actually used
+  again. Confirmed via the real failing log rather than guessing (the
+  DOCKER_METADATA_OUTPUT_TAG_NAMES env dump in the job log showed the actual
+  `sha-...` tag).
+- **While fixing the above, caught a second, latent bug in the same
+  workflow: the final push step rebuilt the image from scratch
+  (`docker/build-push-action` with `push: true`) instead of pushing the
+  image Trivy had just scanned.** With identical inputs and warm cache this
+  usually produces a bit-identical image, but "usually" defeats the entire
+  point of scan-before-push — the image that ships is nominally a different
+  build than the one that passed the gate. Replaced the rebuild with a
+  plain `docker push` of each tag the already-built-and-loaded image carries
+  (labels are already baked into the image from the build step, nothing to
+  reapply at push time).
