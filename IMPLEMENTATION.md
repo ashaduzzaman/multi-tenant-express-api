@@ -299,3 +299,17 @@ missing or empty` from `pnpm store path --silent`.** Root cause:
   `pnpm-workspace.yaml`, then verified a frozen install succeeds under pnpm
   12 in an isolated copy, and re-ran the full local suite (typecheck, lint,
   format:check, audit, all 172 tests) with no regressions.
+- **`docker.yml`: `ERROR: failed to build: Cache export is not supported for
+  the docker driver`, followed by the SARIF upload step failing because
+  `trivy-results.sarif` was never produced.** The second error is just
+  fallout from the first — the scan-and-push job never got an image to scan.
+  Root cause: `docker/build-push-action` with no preceding
+  `docker/setup-buildx-action` step falls back to the classic `docker`
+  driver, which supports `load: true` (needed so Trivy can scan the image
+  locally before it's ever pushed) but not `cache-to`/`cache-from` — those
+  require the `docker-container` driver. Fixed by adding an explicit
+  `docker/setup-buildx-action@v4` step before the first build step, which
+  supports both `load` and cache export together. No Docker available in
+  this environment (see above) to run the workflow end-to-end locally; this
+  fix is based on reading `docker/build-push-action`'s own documented
+  driver/caching constraints, not a local repro.
