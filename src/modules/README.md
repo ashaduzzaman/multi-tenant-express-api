@@ -18,8 +18,8 @@ modules/<feature>/
 **Required wiring in `src/app.ts`:**
 
 ```ts
-import { projectsRouter } from '#/modules/projects/projects.router.js';
-app.use('/api/v1/projects', projectsRouter);
+import { projectsRouter } from "#/modules/projects/projects.router.js";
+app.use("/api/v1/projects", projectsRouter);
 ```
 
 Nothing else — the router mounts `authMiddleware` / `tenantContextMiddleware` / `loadPermissions` / `requirePermission` itself (see `roles.router.ts`), so `app.ts` stays a plain index of what's mounted where.

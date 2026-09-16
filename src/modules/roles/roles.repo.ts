@@ -1,8 +1,11 @@
-import { Prisma } from '@prisma/client';
-import { withTenantContext, withTenantContextReadOnly } from '#/db/tenant-context.js';
-import { ConflictError } from '#/lib/errors.js';
-import type { PaginatedResult, PaginationParams } from '#/lib/pagination.js';
-import type { CreateRoleInput, UpdateRoleInput } from './roles.schema.js';
+import { Prisma } from "@prisma/client";
+import {
+  withTenantContext,
+  withTenantContextReadOnly,
+} from "#/db/tenant-context.js";
+import { ConflictError } from "#/lib/errors.js";
+import type { PaginatedResult, PaginationParams } from "#/lib/pagination.js";
+import type { CreateRoleInput, UpdateRoleInput } from "./roles.schema.js";
 
 export interface RoleWithStats {
   id: string;
@@ -22,14 +25,17 @@ export interface PermissionDto {
   description: string;
 }
 
-const SORT_COLUMN: Record<string, 'name' | 'createdAt'> = { name: 'name', createdAt: 'createdAt' };
+const SORT_COLUMN: Record<string, "name" | "createdAt"> = {
+  name: "name",
+  createdAt: "createdAt",
+};
 
 export async function listRoles(
   tenantId: string,
   params: PaginationParams,
 ): Promise<PaginatedResult<RoleWithStats>> {
   return withTenantContextReadOnly(tenantId, async (tx) => {
-    const orderBy = { [SORT_COLUMN[params.sort] ?? 'name']: params.order };
+    const orderBy = { [SORT_COLUMN[params.sort] ?? "name"]: params.order };
     const [total, roles] = await Promise.all([
       tx.role.count({ where: { tenantId } }),
       tx.role.findMany({
@@ -50,13 +56,18 @@ export async function listRoles(
   });
 }
 
-export async function listPermissionCatalog(tenantId: string): Promise<PermissionDto[]> {
+export async function listPermissionCatalog(
+  tenantId: string,
+): Promise<PermissionDto[]> {
   return withTenantContextReadOnly(tenantId, (tx) =>
-    tx.permission.findMany({ orderBy: { name: 'asc' } }),
+    tx.permission.findMany({ orderBy: { name: "asc" } }),
   );
 }
 
-export async function findRoleById(tenantId: string, roleId: string): Promise<RoleWithStats | null> {
+export async function findRoleById(
+  tenantId: string,
+  roleId: string,
+): Promise<RoleWithStats | null> {
   return withTenantContextReadOnly(tenantId, async (tx) => {
     const role = await tx.role.findUnique({
       where: { id: roleId },
@@ -72,7 +83,9 @@ export async function createRole(
 ): Promise<RoleWithStats> {
   try {
     return await withTenantContext(tenantId, async (tx) => {
-      const role = await tx.role.create({ data: { tenantId, name: input.name } });
+      const role = await tx.role.create({
+        data: { tenantId, name: input.name },
+      });
 
       if (input.permissionIds && input.permissionIds.length > 0) {
         await tx.rolePermission.createMany({
@@ -107,7 +120,10 @@ export async function updateRole(
   try {
     return await withTenantContext(tenantId, async (tx) => {
       if (input.name !== undefined) {
-        await tx.role.update({ where: { id: roleId }, data: { name: input.name } });
+        await tx.role.update({
+          where: { id: roleId },
+          data: { name: input.name },
+        });
       }
 
       if (input.permissionIds !== undefined) {
@@ -134,14 +150,22 @@ export async function updateRole(
   }
 }
 
-export async function deleteRole(tenantId: string, roleId: string): Promise<void> {
+export async function deleteRole(
+  tenantId: string,
+  roleId: string,
+): Promise<void> {
   await withTenantContext(tenantId, async (tx) => {
     await tx.role.delete({ where: { id: roleId } });
   });
 }
 
-export async function countUsersForRole(tenantId: string, roleId: string): Promise<number> {
-  return withTenantContextReadOnly(tenantId, (tx) => tx.user.count({ where: { roleId } }));
+export async function countUsersForRole(
+  tenantId: string,
+  roleId: string,
+): Promise<number> {
+  return withTenantContextReadOnly(tenantId, (tx) =>
+    tx.user.count({ where: { roleId } }),
+  );
 }
 
 function toRoleWithStats(role: {
@@ -165,8 +189,11 @@ function toRoleWithStats(role: {
 }
 
 function mapWriteError(err: unknown, name: string | undefined): unknown {
-  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-    return new ConflictError('A role with this name already exists', { name });
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === "P2002"
+  ) {
+    return new ConflictError("A role with this name already exists", { name });
   }
   return err;
 }

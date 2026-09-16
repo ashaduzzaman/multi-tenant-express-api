@@ -1,7 +1,7 @@
-import { jwtVerify, SignJWT } from 'jose';
-import { z } from 'zod';
-import { env } from '#/config/env.js';
-import { UnauthorizedError } from '#/lib/errors.js';
+import { jwtVerify, SignJWT } from "jose";
+import { z } from "zod";
+import { env } from "#/config/env.js";
+import { UnauthorizedError } from "#/lib/errors.js";
 
 const secret = new TextEncoder().encode(env.JWT_SECRET);
 
@@ -14,9 +14,11 @@ const accessTokenClaimsSchema = z.object({
 
 export type AccessTokenClaims = z.infer<typeof accessTokenClaimsSchema>;
 
-export async function signAccessToken(claims: AccessTokenClaims): Promise<string> {
+export async function signAccessToken(
+  claims: AccessTokenClaims,
+): Promise<string> {
   return new SignJWT({ ...claims })
-    .setProtectedHeader({ alg: 'HS256' })
+    .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setIssuer(env.JWT_ISSUER)
     .setAudience(env.JWT_AUDIENCE)
@@ -25,7 +27,9 @@ export async function signAccessToken(claims: AccessTokenClaims): Promise<string
 }
 
 /** Throws UnauthorizedError (never a raw jose/zod error) for any invalid token. */
-export async function verifyAccessToken(token: string): Promise<AccessTokenClaims> {
+export async function verifyAccessToken(
+  token: string,
+): Promise<AccessTokenClaims> {
   try {
     const { payload } = await jwtVerify(token, secret, {
       issuer: env.JWT_ISSUER,
@@ -33,11 +37,11 @@ export async function verifyAccessToken(token: string): Promise<AccessTokenClaim
     });
     const claims = accessTokenClaimsSchema.safeParse(payload);
     if (!claims.success) {
-      throw new UnauthorizedError('Invalid token claims');
+      throw new UnauthorizedError("Invalid token claims");
     }
     return claims.data;
   } catch (err) {
     if (err instanceof UnauthorizedError) throw err;
-    throw new UnauthorizedError('Invalid or expired token');
+    throw new UnauthorizedError("Invalid or expired token");
   }
 }

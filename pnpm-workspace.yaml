@@ -1,6 +1,19 @@
+packages:
+  - "."
+
 allowBuilds:
-  '@prisma/client': true
-  '@prisma/engines': true
+  "@prisma/client": true
+  "@prisma/engines": true
   bcrypt: true
   esbuild: true
   prisma: true
+
+# Transitive dependencies with published security advisories, forced to a
+# patched version regardless of what the parent package (bcrypt's own
+# @mapbox/node-pre-gyp; prisma's own @prisma/config) declares. Neither `tar`
+# nor `deepmerge-ts` is used at application runtime — both are install-time/
+# CLI-time tooling — but `pnpm audit --audit-level=high` (CI gate) doesn't
+# distinguish, and there's no reason not to fix what's fixable.
+overrides:
+  tar: ^7.5.22
+  deepmerge-ts: ^8.0.0

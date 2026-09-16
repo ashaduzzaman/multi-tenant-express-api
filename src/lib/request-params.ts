@@ -1,5 +1,5 @@
-import type { Request } from 'express';
-import { BadRequestError } from './errors.js';
+import type { Request } from "express";
+import { BadRequestError } from "./errors.js";
 
 /**
  * Express 5's route params are typed `string | string[]` (path-to-regexp v6
@@ -10,7 +10,7 @@ import { BadRequestError } from './errors.js';
  */
 export function requireParam(req: Request, name: string): string {
   const value = req.params[name];
-  if (typeof value !== 'string' || value.length === 0) {
+  if (typeof value !== "string" || value.length === 0) {
     throw new BadRequestError(`Missing or invalid path parameter: ${name}`);
   }
   return value;
