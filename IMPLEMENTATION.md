@@ -352,3 +352,30 @@ github.sha }}` — the bare commit SHA. But the image was only ever `load`ed
   plain `docker push` of each tag the already-built-and-loaded image carries
   (labels are already baked into the image from the build step, nothing to
   reapply at push time).
+- **Trivy DB download started getting rate-limited against the default
+  registry.** Fixed (by the user, directly) by adding `TRIVY_DB_REPOSITORY`/
+  `TRIVY_JAVA_DB_REPOSITORY` env vars listing `public.ecr.aws/...` ahead of
+  `ghcr.io/...` as fallback mirrors, plus `ignore-unfixed: true` so the gate
+  doesn't block on CVEs with no available patch.
+- **Refined the Trivy/SARIF setup further after review:** the single
+  combined step (SARIF output, `exit-code: 1`) meant a failed scan produced
+  no visible detail in the log — you'd have to open the Security tab's SARIF
+  upload to see _which_ package failed. Split into two steps: a **table**-
+  format gate that fails the job and prints its findings straight to the job
+  log (no output file to go missing if Trivy errors before writing one), and
+  a second **SARIF** run (`if: always()`, `exit-code: 0`, `skip-setup-trivy:
+true` to reuse the first run's already-downloaded DB/binary) purely to
+  populate the Security tab regardless of whether the gate passed. Also
+  added `RUN apk upgrade --no-cache` to both `Dockerfile` stages that
+  produce OS layers (`base` and `runtime`) — the `node:22-alpine` base image
+  is rebuilt far less often than Alpine ships package patches, so a
+  known-fixed OS CVE can sit in a stale base layer for weeks; this pulls
+  current Alpine fixes at build time independent of Docker's own build
+  cache (which doesn't help here — the `FROM` layer itself is what's stale).
+  Deliberately did _not_ pin `node:22-alpine` to an exact version/digest as
+  a separate earlier suggestion proposed — the pin under consideration was
+  itself a year-old patch on a superseded Alpine minor, which would trade
+  the OS-currency problem for a Node-currency one. Left the floating
+  `node:22-alpine` tag as-is; revisit with a digest pin + Dependabot/Renovate
+  if reproducibility ever matters more than always building on current
+  patches.
