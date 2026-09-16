@@ -58,7 +58,7 @@ jobs:
         with:
           image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
           scanners: vuln
-          ignore-unfixed: true          # don't block on CVEs with no patch yet
+          ignore-unfixed: true # don't block on CVEs with no patch yet
           severity: CRITICAL,HIGH
           format: sarif
           output: trivy-results.sarif
@@ -66,7 +66,7 @@ jobs:
 
       - uses: github/codeql-action/upload-sarif@v3
         if: always()
-        continue-on-error: true         # don't fail if code scanning isn't enabled
+        continue-on-error: true # don't fail if code scanning isn't enabled
         with:
           sarif_file: trivy-results.sarif
 
