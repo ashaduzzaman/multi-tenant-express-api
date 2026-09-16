@@ -2,12 +2,17 @@
 
 # ---- Base ----
 FROM node:22-alpine AS base
+# Pulls whatever Alpine package fixes exist today, regardless of how stale
+# the node:22-alpine image itself is (Alpine ships patches far more often
+# than that image gets rebuilt) — this is an OS-package refresh, unrelated
+# to and not satisfied by Docker's own build cache.
+RUN apk upgrade --no-cache
 RUN corepack enable && corepack prepare pnpm@12 --activate
 WORKDIR /app
 
 # ---- Dependencies ----
 FROM base AS deps
-COPY package.json pnpm-lock.yaml* ./
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm install --frozen-lockfile --prod=false
 
@@ -29,6 +34,9 @@ RUN pnpm exec prisma generate && \
 
 # ---- Runtime ----
 FROM node:22-alpine AS runtime
+# Same rationale as the base stage — this is the OS layer that actually
+# ships, so it's the one that matters most for Trivy's OS-package findings.
+RUN apk upgrade --no-cache
 ENV NODE_ENV=production \
     PORT=3000
 

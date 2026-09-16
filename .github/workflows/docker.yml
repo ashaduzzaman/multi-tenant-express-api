@@ -51,24 +51,49 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - uses: aquasecurity/trivy-action@v0.36.0
+      # Gate: fails the job on CRITICAL/HIGH. Table format prints straight to
+      # the job log, so there's no output file to go missing if Trivy itself
+      # errors out before writing one.
+      - name: Trivy gate (table, fails the job)
+        uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db,ghcr.io/aquasecurity/trivy-db
+          TRIVY_JAVA_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-java-db,ghcr.io/aquasecurity/trivy-java-db
         with:
-          image-ref: ghcr.io/${{ github.repository }}:${{ github.sha }}
-          format: sarif
-          output: trivy-results.sarif
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          scanners: vuln
+          ignore-unfixed: true # don't block on CVEs with no patch yet
           severity: CRITICAL,HIGH
+          format: table
           exit-code: "1"
 
-      - uses: github/codeql-action/upload-sarif@codeql-bundle-v2.27.0
+      # Re-scan for the Security tab regardless of whether the gate above
+      # passed — Trivy's own cache makes this a second run in seconds, not a
+      # second full scan. exit-code 0 here on purpose: the gate step already
+      # decided pass/fail, this one only needs to produce the SARIF file.
+      - name: Trivy SARIF (for code scanning)
         if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ fromJSON(steps.meta.outputs.json).tags[0] }}
+          scanners: vuln
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: "0"
+          skip-setup-trivy: true
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        continue-on-error: true # don't fail if code scanning isn't enabled
         with:
           sarif_file: trivy-results.sarif
 
-      # Only reached if Trivy passed — no vulnerable image ever gets pushed.
-      - uses: docker/build-push-action@v7
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
+      - name: Push scanned image
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && docker push "$tag"
+          done <<< "$TAGS"
